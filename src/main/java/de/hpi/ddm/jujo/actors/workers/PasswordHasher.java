@@ -1,6 +1,7 @@
 package de.hpi.ddm.jujo.actors.workers;
 
 import akka.actor.AbstractActor;
+import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import lombok.AllArgsConstructor;
@@ -12,6 +13,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class PasswordHasher extends AbstractActor {
+
+    public static Props props() {
+        return Props.create(PasswordHasher.class);
+    }
 
     private final static int CHUNK_SIZE = 100;
 

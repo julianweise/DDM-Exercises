@@ -1,5 +1,7 @@
 package de.hpi.ddm.jujo.actors;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
 
 import com.typesafe.config.Config;
@@ -10,18 +12,30 @@ import akka.cluster.Cluster;
 import scala.concurrent.Await;
 import scala.concurrent.duration.Duration;
 
-public class MasterSystem {
+public abstract class BaseActorSystem {
 
-    protected static Config createConfiguration(String actorSystemName, String actorSystemRole, String host, int port) {
+    public static int numberOfWorkers = 0;
 
+    protected static String getMachineAddress() {
+        try {
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (UnknownHostException e) {
+            return "localhost";
+            // TODO: Add logging
+        }
+    }
+
+    protected static Config createConfiguration(String actorSystemName, String actorSystemRole, String masterHost, int masterPort, int localPort) {
+
+        String localHost = getMachineAddress();
         // Create the Config with fallback to the application config
         return ConfigFactory.parseString(
-                "akka.remote.netty.tcp.hostname = \"" + host + "\"\n" +
-                        "akka.remote.netty.tcp.port = " + port + "\n" +
-                        "akka.remote.artery.canonical.hostname = \"" + host + "\"\n" +
-                        "akka.remote.artery.canonical.port = " + port + "\n" +
+                "akka.remote.netty.tcp.hostname = \"" + localHost + "\"\n" +
+                        "akka.remote.netty.tcp.port = " + localPort + "\n" +
+                        "akka.remote.artery.canonical.hostname = \"" + localHost + "\"\n" +
+                        "akka.remote.artery.canonical.port = " + localPort + "\n" +
                         "akka.cluster.roles = [" + actorSystemRole + "]\n" +
-                        "akka.cluster.seed-nodes = [\"akka://" + actorSystemName + "@" + host + ":" + port + "\"]")
+                        "akka.cluster.seed-nodes = [\"akka://" + actorSystemName + "@" + masterHost + ":" + masterPort + "\"]")
                 .withFallback(ConfigFactory.load("octopus"));
     }
 

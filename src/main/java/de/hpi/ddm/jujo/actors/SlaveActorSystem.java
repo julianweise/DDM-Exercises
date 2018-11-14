@@ -1,17 +1,16 @@
 package de.hpi.ddm.jujo.actors;
 
+import akka.actor.ActorSystem;
+import akka.cluster.Cluster;
+import com.typesafe.config.Config;
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-import com.typesafe.config.Config;
+public class SlaveActorSystem extends BaseActorSystem {
 
-import akka.actor.ActorSystem;
-import akka.cluster.Cluster;
-
-
-public class Master extends MasterSystem {
-
-    public static final String MASTER_ROLE = "master";
+    public static final String SLAVE_ROLE = "slave";
+    private static final int SLAVE_PORT = 7877;
 
     protected static String getMachineAddress() {
         try {
@@ -22,10 +21,12 @@ public class Master extends MasterSystem {
         }
     }
 
-    public static void start(String actorSystemName, int workers, String host, int port) {
-        final Config config = createConfiguration(actorSystemName, MASTER_ROLE, host, port);
+    public static void start(String actorSystemName, int workers, String host) {
+        final Config config = createConfiguration(actorSystemName, SLAVE_ROLE, host, MasterActorSystem.MASTER_PORT, SLAVE_PORT);
 
         final ActorSystem system = createSystem(actorSystemName, config);
+
+        numberOfWorkers = workers;
 
         Cluster.get(system).registerOnMemberUp(() -> {
             // TODO

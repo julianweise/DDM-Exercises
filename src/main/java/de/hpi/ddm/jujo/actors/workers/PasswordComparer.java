@@ -1,6 +1,7 @@
 package de.hpi.ddm.jujo.actors.workers;
 
 import akka.actor.AbstractActor;
+import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import lombok.AllArgsConstructor;
@@ -9,6 +10,10 @@ import lombok.Data;
 import java.io.Serializable;
 
 public class PasswordComparer extends AbstractActor {
+
+    public static Props props() {
+        return Props.create(PasswordComparer.class);
+    }
 
     private final LoggingAdapter log = Logging.getLogger(this.context().system(), this);
 
@@ -23,17 +28,24 @@ public class PasswordComparer extends AbstractActor {
         private int endPassword;
     }
 
+    @Data @AllArgsConstructor @SuppressWarnings("unused")
+    public static class CrackingWorkloadMessage implements Serializable {
+        private static final long serialVersionUID = -932847523475928347L;
+        private CrackingWorkloadMessage() {}
+        private String[] hashes;
+    }
+
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(PasswordMaster.CrackingWorkloadMessage.class, this::handle)
+                .match(CrackingWorkloadMessage.class, this::handle)
                 .match(CompareHashesMessage.class, this::handle)
                 .matchAny(object -> this.log.info("Received unknown message: \"{}\"", object.toString()))
                 .build();
     }
 
-    private void handle(PasswordMaster.CrackingWorkloadMessage message) {
-        this.passwordHashes = message.getPasswordHashes();
+    private void handle(CrackingWorkloadMessage message) {
+        this.passwordHashes = message.getHashes();
     }
 
     private void handle(CompareHashesMessage message) {
