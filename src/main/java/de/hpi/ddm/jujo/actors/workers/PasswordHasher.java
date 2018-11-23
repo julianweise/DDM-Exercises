@@ -14,7 +14,7 @@ import java.security.NoSuchAlgorithmException;
 
 public class PasswordHasher extends AbstractActor {
 
-    public static Props props() {
+    static Props props() {
         return Props.create(PasswordHasher.class);
     }
 
@@ -23,7 +23,7 @@ public class PasswordHasher extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(this.context().system(), this);
 
     @Data @AllArgsConstructor @SuppressWarnings("unused")
-    public static class HashNumbersMessage implements Serializable {
+    static class HashNumbersMessage implements Serializable {
         private static final long serialVersionUID = -7643194361868862395L;
         private HashNumbersMessage() {}
         private int from;
@@ -40,10 +40,17 @@ public class PasswordHasher extends AbstractActor {
 
     private void handle(HashNumbersMessage message) {
         String[] hashes = new String[CHUNK_SIZE];
-        for(int i = message.from; i <= message.to; ++i) {
+        for (int i = message.from; i <= message.to; ++i) {
             hashes[i % CHUNK_SIZE] = hash(i);
             if (i % CHUNK_SIZE == CHUNK_SIZE - 1) {
-                // TODO: Send intermediate result back to parent
+                this.context().parent().tell(
+                    PasswordComparator.CompareHashesMessage.builder()
+                            .hashes(hashes)
+                            .startPassword(message.from)
+                            .endPassword(message.to)
+                            .build(),
+                    this.self()
+                );
             }
         }
     }

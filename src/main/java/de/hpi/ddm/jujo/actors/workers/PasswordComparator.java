@@ -5,6 +5,7 @@ import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -19,7 +20,7 @@ public class PasswordComparator extends AbstractActor {
 
     private String[] passwordHashes;
 
-    @Data @AllArgsConstructor @SuppressWarnings("unused")
+    @Data @AllArgsConstructor @Builder @SuppressWarnings("unused")
     static class CompareHashesMessage implements Serializable {
         private static final long serialVersionUID = -7643124234268862395L;
         private CompareHashesMessage() {}
