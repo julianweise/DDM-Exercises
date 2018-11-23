@@ -43,16 +43,20 @@ public class PasswordHasher extends AbstractActor {
         for (int i = message.from; i <= message.to; ++i) {
             hashes[i % CHUNK_SIZE] = hash(i);
             if (i % CHUNK_SIZE == CHUNK_SIZE - 1) {
-                this.context().parent().tell(
-                    PasswordComparator.CompareHashesMessage.builder()
-                            .hashes(hashes)
-                            .startPassword(message.from)
-                            .endPassword(message.to)
-                            .build(),
-                    this.self()
-                );
+                this.sendHashes(hashes, message.from, message.to);
             }
         }
+    }
+
+    private void sendHashes(String[] hashes, int rangeStart, int rangeEnd) {
+        this.context().parent().tell(
+            PasswordComparator.CompareHashesMessage.builder()
+                    .hashes(hashes)
+                    .startPassword(rangeStart)
+                    .endPassword(rangeEnd)
+                    .build(),
+            this.self()
+        );
     }
 
     private String hash(int number) {
