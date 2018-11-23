@@ -29,7 +29,7 @@ public class PasswordComparator extends AbstractActor {
         private int endPassword;
     }
 
-    @Data @AllArgsConstructor @SuppressWarnings("unused")
+    @Data @Builder @SuppressWarnings("unused")
     static class CrackingWorkloadMessage implements Serializable {
         private static final long serialVersionUID = -932847523475928347L;
         private CrackingWorkloadMessage() {}

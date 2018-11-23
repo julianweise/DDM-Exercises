@@ -68,18 +68,18 @@ public class PasswordMaster extends AbstractActor {
     private void handle(WorkDispatcher.PasswordCrackWorkMessage message) {
         this.passwordHashes.addAll(Arrays.asList(message.getPasswordHashes()));
         int numberOfComparers = Math.round(message.getNumberOfWorkers() * RATIO_COMPARER_TO_HASHER);
-        this.initializeComparers(numberOfComparers);
+        this.initializeComparators(numberOfComparers);
         this.initializeHashers(message.getNumberOfWorkers() - numberOfComparers);
         for (ActorRef hasher : hashers) {
             this.distributeHashNumbers(hasher);
         }
     }
 
-    private void initializeComparers(int numberOfComparers) {
-        for (int i = 0; i < numberOfComparers; ++i) {
-            ActorRef comparer = this.context().system().actorOf(PasswordComparator.props());
-            this.distributePasswordHashes(comparer);
-            this.comparers.add(comparer);
+    private void initializeComparators(int numberOfComparators) {
+        for (int i = 0; i < numberOfComparators; ++i) {
+            ActorRef comparator = this.context().system().actorOf(PasswordComparator.props());
+            this.distributePasswordHashes(comparator);
+            this.comparers.add(comparator);
         }
     }
 
@@ -97,8 +97,13 @@ public class PasswordMaster extends AbstractActor {
         this.hashedNumbers += HASH_RANGE + 1;
     }
 
-    private void distributePasswordHashes(ActorRef comparer) {
-        comparer.tell(new PasswordComparator.CrackingWorkloadMessage(this.passwordHashes.toArray(new String[0])), this.self());
+    private void distributePasswordHashes(ActorRef comparator) {
+        comparator.tell(
+                PasswordComparator.CrackingWorkloadMessage.builder()
+                    .hashes(this.passwordHashes.toArray(new String[0]))
+                    .build(),
+            this.self()
+        );
     }
 
     private void handle(PasswordCrackedMessage message) {
