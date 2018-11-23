@@ -9,10 +9,10 @@ import lombok.Data;
 
 import java.io.Serializable;
 
-public class PasswordComparer extends AbstractActor {
+public class PasswordComparator extends AbstractActor {
 
     static Props props() {
-        return Props.create(PasswordComparer.class);
+        return Props.create(PasswordComparator.class);
     }
 
     private final LoggingAdapter log = Logging.getLogger(this.context().system(), this);

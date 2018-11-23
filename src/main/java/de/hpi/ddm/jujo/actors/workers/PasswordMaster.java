@@ -59,7 +59,7 @@ public class PasswordMaster extends AbstractActor {
         return receiveBuilder()
                 .match(WorkDispatcher.PasswordCrackWorkMessage.class, this::handle)
                 .match(PasswordCrackedMessage.class, this::handle)
-                .match(PasswordComparer.CompareHashesMessage.class, this::handle)
+                .match(PasswordComparator.CompareHashesMessage.class, this::handle)
                 .match(RequestNewHashNumbersMessage.class, this::handle)
                 .matchAny(object -> this.log.info("Received unknown message: \"{}\"", object.toString()))
                 .build();
@@ -77,7 +77,7 @@ public class PasswordMaster extends AbstractActor {
 
     private void initializeComparers(int numberOfComparers) {
         for (int i = 0; i < numberOfComparers; ++i) {
-            ActorRef comparer = this.context().system().actorOf(PasswordComparer.props());
+            ActorRef comparer = this.context().system().actorOf(PasswordComparator.props());
             this.distributePasswordHashes(comparer);
             this.comparers.add(comparer);
         }
@@ -98,7 +98,7 @@ public class PasswordMaster extends AbstractActor {
     }
 
     private void distributePasswordHashes(ActorRef comparer) {
-        comparer.tell(new PasswordComparer.CrackingWorkloadMessage(this.passwordHashes.toArray(new String[0])), this.self());
+        comparer.tell(new PasswordComparator.CrackingWorkloadMessage(this.passwordHashes.toArray(new String[0])), this.self());
     }
 
     private void handle(PasswordCrackedMessage message) {
@@ -115,7 +115,7 @@ public class PasswordMaster extends AbstractActor {
         this.distributeHashNumbers(this.sender());
     }
 
-    private void handle(PasswordComparer.CompareHashesMessage message) {
+    private void handle(PasswordComparator.CompareHashesMessage message) {
         this.comparers.get(this.nextComparerIndex).tell(message, this.self());
         this.nextComparerIndex = ++this.nextComparerIndex % this.comparers.size();
     }
