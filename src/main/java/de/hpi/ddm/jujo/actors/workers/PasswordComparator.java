@@ -4,7 +4,6 @@ import akka.actor.AbstractActor;
 import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
@@ -20,7 +19,7 @@ public class PasswordComparator extends AbstractActor {
 
     private String[] passwordHashes;
 
-    @Data @AllArgsConstructor @Builder @SuppressWarnings("unused")
+    @Data @Builder @SuppressWarnings("unused")
     static class CompareHashesMessage implements Serializable {
         private static final long serialVersionUID = -7643124234268862395L;
         private CompareHashesMessage() {}
@@ -57,15 +56,21 @@ public class PasswordComparator extends AbstractActor {
         for (int i = 0; i < message.hashes.length; ++i) {
             for (String password : this.passwordHashes) {
                 if (password.equals(message.hashes[i])) {
-                    this.getContext().parent().tell(
-                            new PasswordMaster.PasswordCrackedMessage(
-                                    password,
-                                    message.startPassword + i), this.self()
-                    );
+                    this.sendCrackedPassword(password, message.startPassword + i);
                     break;
                 }
             }
         }
+    }
+
+    private void sendCrackedPassword(String passwordHash, int password) {
+        this.getContext().parent().tell(
+            PasswordMaster.PasswordCrackedMessage.builder()
+                .passwordHash(passwordHash)
+                .password(password)
+                .build(),
+            this.self()
+        );
     }
 
 }

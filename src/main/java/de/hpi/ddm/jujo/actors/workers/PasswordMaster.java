@@ -9,6 +9,7 @@ import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import javafx.util.Pair;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -35,7 +36,7 @@ public class PasswordMaster extends AbstractActor {
     private List<ActorRef> hashers = new ArrayList<>();
     private int nextComparerIndex = 0;
 
-    @Data @AllArgsConstructor @SuppressWarnings("unused")
+    @Data @Builder @SuppressWarnings("unused")
     public static class PasswordCrackedMessage implements Serializable {
         private static final long serialVersionUID = -3643239284342862395L;
         private PasswordCrackedMessage() {}
