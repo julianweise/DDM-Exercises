@@ -11,7 +11,7 @@ import java.io.Serializable;
 
 public class PasswordComparer extends AbstractActor {
 
-    public static Props props() {
+    static Props props() {
         return Props.create(PasswordComparer.class);
     }
 
@@ -20,7 +20,7 @@ public class PasswordComparer extends AbstractActor {
     private String[] passwordHashes;
 
     @Data @AllArgsConstructor @SuppressWarnings("unused")
-    public static class CompareHashesMessage implements Serializable {
+    static class CompareHashesMessage implements Serializable {
         private static final long serialVersionUID = -7643124234268862395L;
         private CompareHashesMessage() {}
         private String[] hashes;
@@ -29,7 +29,7 @@ public class PasswordComparer extends AbstractActor {
     }
 
     @Data @AllArgsConstructor @SuppressWarnings("unused")
-    public static class CrackingWorkloadMessage implements Serializable {
+    static class CrackingWorkloadMessage implements Serializable {
         private static final long serialVersionUID = -932847523475928347L;
         private CrackingWorkloadMessage() {}
         private String[] hashes;
@@ -56,7 +56,11 @@ public class PasswordComparer extends AbstractActor {
         for (int i = 0; i < message.hashes.length; ++i) {
             for (String password : this.passwordHashes) {
                 if (password.equals(message.hashes[i])) {
-                    // TODO send message to parent
+                    this.getContext().parent().tell(
+                            new PasswordMaster.PasswordCrackedMessage(
+                                    password,
+                                    message.startPassword + i), this.self()
+                    );
                     break;
                 }
             }
