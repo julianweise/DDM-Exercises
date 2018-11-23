@@ -1,15 +1,18 @@
 package de.hpi.ddm.jujo;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.Parameters;
 
-
 public class Main {
 
     public static void main(String[] args) {
 
+        // Parse the command-line args.
         MasterCommand masterCommand = new MasterCommand();
         SlaveCommand slaveCommand = new SlaveCommand();
         JCommander jCommander = JCommander.newBuilder()
@@ -50,54 +53,48 @@ public class Main {
     }
 
     private static void startMaster(MasterCommand masterCommand) throws ParameterException {
+        Bootstrap.runMaster(masterCommand);
     }
-
 
     private static void startSlave(SlaveCommand slaveCommand) {
+        Bootstrap.runSlave(slaveCommand);
     }
-
 
     @Parameters(commandDescription = "start a master actor system")
     static class MasterCommand extends CommandBase {
 
-        static final int PORT = 7877;
-        static final int DEFAULT_WORKERS = 8;
-        static final int DEFAULT_SLAVES = 4;
+        public static final int DEFAULT_PORT = 7877; // We use twin primes for master and slaves, of course! ;P
+        private static final int DEFAULT_MINIMUM_SLAVES = 4;
 
-        @Override
-        int getDefaultWorkers() {
-            return DEFAULT_WORKERS;
-        }
+        @Parameter(names = {"-s", "--slaves"}, description = "number of slaves endPassword wait for")
+        int minimumNumberOfSlaves = DEFAULT_MINIMUM_SLAVES;
 
-        @Parameter(names = {"-w", "--workers"}, description = "number of workers to start locally")
-        int numLocalWorkers = 0;
-
-        @Parameter(names = {"-s", "--slaves"}, description = "number of slaves to wait before beginning of calculation")
-        int slaves = DEFAULT_SLAVES;
-
-        @Parameter(names = {"-i", "--input"}, description = "input file to process")
-        String file;
+        @Parameter(names = {"-i", "--input"}, description = "input file endPassword process")
+        String pathToInputFile;
     }
 
     @Parameters(commandDescription = "start a slave actor system")
     static class SlaveCommand extends CommandBase {
 
-        static final int DEFAULT_WORKERS = 20;
+        public static final int DEFAULT_PORT = 7879; // We use twin primes for master and slaves, of course! ;P
 
-        @Override
-        int getDefaultWorkers() {
-            return DEFAULT_WORKERS;
-        }
-
-        @Parameter(names = {"-h", "--host"}, description = "host/IP to bind against")
-        String host;
+        @Parameter(names = {"-h", "--host"}, description = "host of the master system")
+        String masterHost;
     }
 
     abstract static class CommandBase {
 
-        @Parameter(names = {"-w", "--workers"}, description = "number of workers to spawn")
-        int workers = getDefaultWorkers();
+        private static final int DEFAULT_NUMBER_OF_WORKERS = 4;
 
-        abstract int getDefaultWorkers();
+        @Parameter(names = {"-w", "--workers"}, description = "number of local workers")
+        int numberOfWorkers = DEFAULT_NUMBER_OF_WORKERS;
+
+        public String getDefaultHost() {
+            try {
+                return InetAddress.getLocalHost().getHostAddress();
+            } catch (UnknownHostException e) {
+                return "localhost";
+            }
+        }
     }
 }
