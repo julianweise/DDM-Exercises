@@ -22,11 +22,11 @@ public class ProcessingPipeline {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     private static class PipelineStep {
         private Task task;
-        @Builder.Default private TaskState taskState = TaskState.INITIALIZED;
         private ActorRef taskDispatcher;
         private Task nextStep;
-        @Builder.Default private Task[] requiredSteps = new Task[0];
         private int[] results;
+        @Builder.Default private TaskState taskState = TaskState.INITIALIZED;
+        @Builder.Default private Task[] requiredSteps = new Task[0];
         @Builder.Default private int numberOfAssignedWorkers = 0;
         @Builder.Default private int maxNumberOfWorkers = Integer.MAX_VALUE;
 
@@ -120,7 +120,6 @@ public class ProcessingPipeline {
         PipelineStep step = this.pipelineSteps.get(Task.PASSWORD_CRACKING);
         step.setTaskState(TaskState.TERMINATED);
         step.setResults(plainPasswords);
-
     }
 
     public void geneAnalysisFinished(int[] bestMatchingPartners) {
