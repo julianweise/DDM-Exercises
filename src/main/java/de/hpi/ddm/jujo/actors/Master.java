@@ -29,8 +29,8 @@ public class Master extends AbstractLoggingActor {
     }
 
     public static class WorkDistribution {
-        public static final float FOR_PASSWORD_CRACKING = 0.4f;
-        public static final float FOR_GENE_ANALYSIS = 0.6f;
+        public static final float FOR_PASSWORD_CRACKING = 0.5f;
+        public static final float FOR_GENE_ANALYSIS = 0.5f;
     }
 
 
@@ -140,14 +140,19 @@ public class Master extends AbstractLoggingActor {
 
     private void handle(SlaveNodeRegistrationMessage message) {
         this.log().info(String.format("New slave registered from %s", message.slaveAddress.toString()));
+        this.currentNumberOfSlaves++;
         for (int i = 0; i < message.numberOfWorkers; i++) {
             this.availableWorkers.add(message.slaveAddress);
         }
-        this.log().info(String.format("At least %d slaves required. Currently present number of slaves is %d", this.minNumberOfSlavesToStartWork, this.availableWorkers.size()));
-        if (this.minNumberOfSlavesToStartWork == this.availableWorkers.size()) {
+        this.log().info(
+                String.format("At least %d slaves required. Currently present number of slaves is %d",
+                this.minNumberOfSlavesToStartWork,
+                this.currentNumberOfSlaves)
+        );
+        if (this.minNumberOfSlavesToStartWork == this.currentNumberOfSlaves) {
             int geneWorkers = (int) Math.ceil(WorkDistribution.FOR_GENE_ANALYSIS * this.availableWorkers.size()) - 1;
             this.analyseGenePartners(geneWorkers);
-            this.crackPasswords(this.availableWorkers.size() - geneWorkers);
+            this.crackPasswords(this.availableWorkers.size());
         }
         // TODO Dynamically assign new arriving resources
     }
