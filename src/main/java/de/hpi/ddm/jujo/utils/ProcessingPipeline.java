@@ -22,13 +22,13 @@ public class ProcessingPipeline {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     private static class PipelineStep {
         private Task task;
-        private TaskState taskState;
+        @Builder.Default private TaskState taskState = TaskState.INITIALIZED;
         private ActorRef taskDispatcher;
         private Task nextStep;
-        private Task[] requiredSteps = new Task[0];
+        @Builder.Default private Task[] requiredSteps = new Task[0];
         private int[] results;
-        private int numberOfAssignedWorkers = 0;
-        private int maxNumberOfWorkers = Integer.MAX_VALUE;
+        @Builder.Default private int numberOfAssignedWorkers = 0;
+        @Builder.Default private int maxNumberOfWorkers = Integer.MAX_VALUE;
 
         public PipelineStep setRequiredStepsConvenience(Task... requiredSteps) {
             this.requiredSteps = requiredSteps;
@@ -36,7 +36,7 @@ public class ProcessingPipeline {
         }
 
         public void increaseNumberOfAssignedWorkers() {
-            ++this.numberOfAssignedWorkers;
+            this.numberOfAssignedWorkers += 1;
         }
     }
 
@@ -76,7 +76,6 @@ public class ProcessingPipeline {
         this.master.getContext().watch(passwordDispatcher);
         return PipelineStep.builder()
                 .task(Task.PASSWORD_CRACKING)
-                .taskState(TaskState.INITIALIZED)
                 .taskDispatcher(passwordDispatcher)
                 .nextStep(Task.LINEAR_COMBINATION)
                 .build();
@@ -89,7 +88,6 @@ public class ProcessingPipeline {
         this.master.getContext().watch(geneDispatcher);
         return PipelineStep.builder()
                 .task(Task.GENE_ANALYSIS)
-                .taskState(TaskState.INITIALIZED)
                 .taskDispatcher(geneDispatcher)
                 .nextStep(Task.HASH_MINING)
                 .maxNumberOfWorkers(geneSequences.size())
