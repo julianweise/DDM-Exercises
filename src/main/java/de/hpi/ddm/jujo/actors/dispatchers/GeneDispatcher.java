@@ -120,13 +120,20 @@ public class GeneDispatcher extends AbstractLoggingActor {
 		this.bestGenePartners[message.getOriginalPerson()] = message.getBestPartner();
 		dispatchWork(this.sender());
 
-		if (message.getOriginalPerson() >= this.geneSequences.size() - 1) {
+		if (this.isLastOriginalPerson(message.originalPerson)) {
 			this.submitBestGenePartners();
 		}
 	}
 
+	private boolean isLastOriginalPerson(int originalPerson) {
+		return originalPerson >= this.geneSequences.size() - 1;
+	}
+
 	private void submitBestGenePartners() {
-		// TODO: send gene partners to master
+		this.master.tell(Master.BestGenePartnersFoundMessage.builder()
+				.bestGenePartners(this.bestGenePartners).build(),
+			this.self()
+		);
 	}
 
 	private void dispatchWork(ActorRef worker) {
