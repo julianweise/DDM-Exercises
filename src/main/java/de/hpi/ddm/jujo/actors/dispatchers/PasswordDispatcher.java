@@ -16,7 +16,7 @@ import java.util.*;
 public class PasswordDispatcher extends AbstractLoggingActor {
 
     private static final int LAST_PASSWORD_TO_HASH = 999999;
-    private static final int WORK_CHUNK_SIZE = 1500;
+    private static final int WORK_CHUNK_SIZE = 10000;
     private static final float COMPARATOR_UNDERFLOW_RATIO = 1.5f;
 
     public static Props props(ActorRef master, final List<String> targetPasswordHashes) {
