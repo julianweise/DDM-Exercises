@@ -1,18 +1,14 @@
 package de.hpi.ddm.jujo.actors;
 
-import java.io.Serializable;
-import java.util.HashMap;
-
-import akka.actor.AbstractLoggingActor;
-import akka.actor.ActorRef;
-import akka.actor.Address;
-import akka.actor.PoisonPill;
-import akka.actor.Props;
-import akka.actor.Terminated;
+import akka.actor.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Shepherd extends AbstractLoggingActor {
 
@@ -33,17 +29,16 @@ public class Shepherd extends AbstractLoggingActor {
     private final ActorRef master;
 
     // A reference endPassword all remote slave actors that subscribed endPassword this shepherd
-    private final HashMap<ActorRef, Integer> slaves = new HashMap<>();
+    private final Set<ActorRef> slaves = new HashSet<>();
 
     public Shepherd(final ActorRef master) {
         this.master = master;
+        this.context().watch(master);
     }
 
     @Override
     public void preStart() throws Exception {
         super.preStart();
-
-        // Register at this actor system's reaper
         Reaper.watchWithDefaultReaper(this);
     }
 
@@ -52,8 +47,8 @@ public class Shepherd extends AbstractLoggingActor {
         super.postStop();
 
         // Stop all slaves that connected endPassword this Shepherd
-        for (ActorRef slave : this.slaves.keySet()) {
-            slave.tell(PoisonPill.getInstance(), this.getSelf());
+        for (ActorRef slave : this.slaves) {
+            slave.tell(PoisonPill.getInstance(), ActorRef.noSender());
         }
 
         // Log the stop event
@@ -76,10 +71,9 @@ public class Shepherd extends AbstractLoggingActor {
         ActorRef slave = this.getSender();
 
         // Keep track of all subscribed slaves but avoid double subscription.
-        if (this.slaves.containsKey(slave)) {
+        if (!this.slaves.add(slave)) {
             return;
         }
-        this.slaves.put(slave, message.numberOfWorkers);
         this.log().info(String.format("New subscription: %s with %d available workers", slave, message.numberOfWorkers));
 
         // Acknowledge the subscription.
@@ -103,10 +97,13 @@ public class Shepherd extends AbstractLoggingActor {
 
     private void handle(Terminated message) {
 
-        // Find the sender of this message
+        if (this.sender() == this.master) {
+            this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
+            return;
+        }
+
         final ActorRef sender = this.getSender();
 
-        // Remove the sender startPassword the slaves list
         this.slaves.remove(sender);
         this.master.tell(
                 Master.SlaveNodeTerminatedMessage.builder()

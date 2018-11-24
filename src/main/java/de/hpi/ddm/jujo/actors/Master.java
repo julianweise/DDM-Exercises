@@ -10,6 +10,7 @@ import akka.actor.*;
 import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
 import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
 import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
+import de.hpi.ddm.jujo.utils.ProcessingPipeline;
 import de.siegmar.fastcsv.reader.CsvParser;
 import de.siegmar.fastcsv.reader.CsvReader;
 import de.siegmar.fastcsv.reader.CsvRow;
@@ -21,16 +22,11 @@ import lombok.NoArgsConstructor;
 public class Master extends AbstractLoggingActor {
 
     public static final String DEFAULT_NAME = "master";
-    private static final String INPUT_DATA_PASSWORD_COLUMN = "Password";
-    private static final String INPUT_DATA_GENE_COLUMN = "Gene";
+    public static final String INPUT_DATA_PASSWORD_COLUMN = "Password";
+    public static final String INPUT_DATA_GENE_COLUMN = "Gene";
 
     public static Props props(final int numLocalWorkers, final int minNumberOfSlaves, final String pathToInputFile) {
         return Props.create(Master.class, () -> new Master(numLocalWorkers, minNumberOfSlaves, pathToInputFile));
-    }
-
-    public static class WorkDistribution {
-        public static final float FOR_PASSWORD_CRACKING = 0.5f;
-        public static final float FOR_GENE_ANALYSIS = 0.5f;
     }
 
 
@@ -63,11 +59,22 @@ public class Master extends AbstractLoggingActor {
         private int[] bestGenePartners;
     }
 
+    @Override
+    public void preStart() throws Exception {
+        super.preStart();
+        Reaper.watchWithDefaultReaper(this);
+    }
 
-    private List<Address> availableWorkers = new ArrayList<>();
+    @Override
+    public void postStop() throws Exception {
+        super.postStop();
+        this.log().info("Stopped {}.", this.getSelf());
+    }
+
     private int currentNumberOfSlaves = 0;
     private int minNumberOfSlavesToStartWork;
     private Map<String, List<String>> inputData = new HashMap<>();
+    private ProcessingPipeline pipeline;
 
     public Master(int numLocalWorkers, int minNumberOfSlavesToStartWork, String pathToInputFile) {
         try {
@@ -75,6 +82,7 @@ public class Master extends AbstractLoggingActor {
         } catch (IOException e) {
             this.log().error(e, "Error while processing input file.");
         }
+        this.pipeline =  new ProcessingPipeline(this);
         this.minNumberOfSlavesToStartWork = minNumberOfSlavesToStartWork + 1; // local actor system counts as one slave
         this.self().tell(SlaveNodeRegistrationMessage.builder()
                 .slaveAddress(this.self().path().address())
@@ -82,6 +90,10 @@ public class Master extends AbstractLoggingActor {
                 .build(),
                 this.self()
         );
+    }
+
+    public List<String> getInputDataForColumn(String columnName) {
+        return this.inputData.get(columnName);
     }
 
     private void parseInputFile(String pathToInputFile) throws IOException {
@@ -107,25 +119,6 @@ public class Master extends AbstractLoggingActor {
     }
 
     @Override
-    public void preStart() throws Exception {
-        super.preStart();
-
-        // Register at this actor system's reaper
-        Reaper.watchWithDefaultReaper(this);
-    }
-
-    @Override
-    public void postStop() throws Exception {
-        super.postStop();
-
-        // If the master has stopped, it can also stop the listener
-        // TODO: Kill PasswordMaster
-
-        // Log the stop event
-        this.log().info("Stopped {}.", this.getSelf());
-    }
-
-    @Override
     public Receive createReceive() {
         return receiveBuilder()
                 .match(SlaveNodeRegistrationMessage.class, this::handle)
@@ -139,99 +132,38 @@ public class Master extends AbstractLoggingActor {
     }
 
     private void handle(SlaveNodeRegistrationMessage message) {
-        this.log().info(String.format("New slave registered from %s", message.slaveAddress.toString()));
         this.currentNumberOfSlaves++;
-        for (int i = 0; i < message.numberOfWorkers; i++) {
-            this.availableWorkers.add(message.slaveAddress);
-        }
-        this.log().info(
-                String.format("At least %d slaves required. Currently present number of slaves is %d",
-                this.minNumberOfSlavesToStartWork,
-                this.currentNumberOfSlaves)
-        );
+        this.pipeline.addWorkers(message.getSlaveAddress(), message.getNumberOfWorkers());
+
         if (this.minNumberOfSlavesToStartWork == this.currentNumberOfSlaves) {
-            int geneWorkers = (int) Math.ceil(WorkDistribution.FOR_GENE_ANALYSIS * this.availableWorkers.size()) - 1;
-            this.analyseGenePartners(geneWorkers);
-            this.crackPasswords(this.availableWorkers.size());
+            this.pipeline.start();
         }
-        // TODO Dynamically assign new arriving resources
-    }
-
-    private void assignWorkers(ActorRef workDispatcher, int numberOfWorkers) {
-        List<Address> workers = this.availableWorkers.subList(
-                0,
-                Math.min(numberOfWorkers - 1, this.availableWorkers.size() - 1)
-        );
-
-        workDispatcher.tell(DispatcherMessages.AddComputationNodeMessage.builder()
-                .workerAddresses(workers.toArray(new Address[0]))
-                .build(),
-            this.self()
-        );
-        workers.clear();
-    }
-
-    private void crackPasswords(int numberOfWorkers) {
-        ActorRef passwordDispatcher = this.context().system().actorOf(PasswordDispatcher.props(
-                this.self(),
-                this.inputData.get(INPUT_DATA_PASSWORD_COLUMN))
-        );
-        this.assignWorkers(passwordDispatcher, numberOfWorkers);
-    }
-
-    private void analyseGenePartners(int numberOfWorkers) {
-        ActorRef geneDispatcher = this.context().system().actorOf(GeneDispatcher.props(
-                this.self(),
-                this.inputData.get(INPUT_DATA_GENE_COLUMN))
-        );
-        this.assignWorkers(geneDispatcher, numberOfWorkers);
     }
 
     private void handle(SlaveNodeTerminatedMessage message) {
-        this.availableWorkers.remove(message.slaveAddress);
+        this.log().warning(String.format("Slave actor %s terminated", message.getSlaveAddress()));
     }
 
     private void handle(DispatcherMessages.ReleaseComputationNodeMessage message) {
-        this.availableWorkers.addAll(Arrays.asList(message.getWorkerAddresses()));
-        // TODO Add method to redispatch available resources
+        this.pipeline.addWorker(message.getWorkerAddress());
     }
 
     private void handle(PasswordsCrackedMessage message) {
-        this.sender().tell(PoisonPill.getInstance(), ActorRef.noSender());
-        this.log().info(Arrays.toString(message.getPlainPasswords()));
+        this.pipeline.passwordCrackingFinished(message.getPlainPasswords());
     }
 
     private void handle(BestGenePartnersFoundMessage message) {
-        this.sender().tell(PoisonPill.getInstance(), ActorRef.noSender());
-        this.log().info(Arrays.toString(message.getBestGenePartners()));
+        this.pipeline.geneAnalysisFinished(message.getBestGenePartners());
     }
 
     private void handle(Terminated message) {
 
-        // Find the sender of this message
         final ActorRef sender = this.getSender();
-
-        // TODO
 
         this.log().warning("{} has terminated.", sender);
 
-        // Check if work is complete and stop the actor hierarchy if true
-        if (this.hasFinished()) {
-            this.stopSelfAndListener();
+        if (this.pipeline.hasFinished()) {
+            this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
         }
-    }
-
-    private boolean hasFinished() {
-        // TODO
-        return false;
-    }
-
-    private void stopSelfAndListener() {
-
-        // Tell the listener endPassword stop
-        // TODO
-
-        // Stop self and all child actors by sending a poison pill
-        this.getSelf().tell(PoisonPill.getInstance(), this.getSelf());
     }
 }

@@ -55,8 +55,6 @@ public class Slave extends AbstractLoggingActor {
     @Override
     public void postStop() throws Exception {
         super.postStop();
-
-        // Log the stop event
         this.log().info("Stopped {}.", this.getSelf());
     }
 

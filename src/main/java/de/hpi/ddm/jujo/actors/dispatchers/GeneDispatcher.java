@@ -12,7 +12,6 @@ import akka.remote.RemoteScope;
 import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.workers.GeneWorker;
-import de.hpi.ddm.jujo.actors.workers.PasswordWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,10 +19,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class GeneDispatcher extends AbstractLoggingActor {
 
@@ -60,6 +56,7 @@ public class GeneDispatcher extends AbstractLoggingActor {
 	private List<String> geneSequences;
 	private int[] bestGenePartners;
 	private int nextOriginalPerson = 0;
+	private int activeAnalyzers = 0;
 
 	private GeneDispatcher(ActorRef master, List<String> geneSequences) {
 		this.geneSequences = geneSequences;
@@ -78,14 +75,12 @@ public class GeneDispatcher extends AbstractLoggingActor {
 	}
 
 	private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-		for (Address workerAddress : message.getWorkerAddresses()) {
-			ActorRef worker = this.getContext().actorOf(GeneWorker.props().withDeploy(
-					new Deploy(new RemoteScope(workerAddress)))
-			);
-			this.context().watch(worker);
-			this.initializeWorker(worker);
-			this.dispatchWork(worker);
-		}
+		ActorRef worker = this.getContext().actorOf(GeneWorker.props().withDeploy(
+				new Deploy(new RemoteScope(message.getWorkerAddress())))
+		);
+		this.context().watch(worker);
+		this.initializeWorker(worker);
+		this.dispatchWork(worker);
 	}
 
 	private void initializeWorker(ActorRef worker) {
@@ -117,6 +112,7 @@ public class GeneDispatcher extends AbstractLoggingActor {
 	}
 
 	private void handle(BestGenePartnerFoundMessage message) {
+		--this.activeAnalyzers;
 		this.bestGenePartners[message.getOriginalPerson()] = message.getBestPartner();
 		dispatchWork(this.sender());
 
@@ -147,7 +143,8 @@ public class GeneDispatcher extends AbstractLoggingActor {
 				.originalPerson(this.nextOriginalPerson).build(),
 			this.self()
 		);
-		this.nextOriginalPerson++;
+		++this.nextOriginalPerson;
+		++this.activeAnalyzers;
 	}
 
 	private boolean hasMoreWork() {
@@ -160,5 +157,9 @@ public class GeneDispatcher extends AbstractLoggingActor {
 						workerAddress(this.sender().path().address()),
 				this.self()
 		);
+
+		if (this.activeAnalyzers < 1) {
+			this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
+		}
 	}
 }

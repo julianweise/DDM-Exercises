@@ -13,7 +13,7 @@ public class DispatcherMessages {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class AddComputationNodeMessage implements Serializable {
         private static final long serialVersionUID = 7594619467258919392L;
-        private Address[] workerAddresses;
+        private Address workerAddress;
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor

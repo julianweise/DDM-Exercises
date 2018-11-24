@@ -65,7 +65,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     private ArrayList<CrackedPassword> crackedPasswords = new ArrayList<>();
     private List<PasswordsHashedMessage> hashesToCompare = new ArrayList<>();
     private ActorRef master;
-    private int activeHasher = 0;
+    private int activeHashers = 0;
     private int activeCompatators = 0;
     private int nextPasswordToHash = 0;
 
@@ -89,18 +89,16 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     }
 
     private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-        for (Address workerAddress : message.getWorkerAddresses()) {
-            ActorRef worker = this.getContext().actorOf(PasswordWorker.props().withDeploy(
-                    new Deploy(new RemoteScope(workerAddress)))
-            );
-            this.context().watch(worker);
-            this.dispatchWork(worker);
-        }
+        ActorRef worker = this.getContext().actorOf(PasswordWorker.props().withDeploy(
+                new Deploy(new RemoteScope(message.getWorkerAddress())))
+        );
+        this.context().watch(worker);
+        this.dispatchWork(worker);
     }
 
     private void handle(PasswordsHashedMessage message) {
         this.hashesToCompare.add(message);
-        this.activeHasher--;
+        this.activeHashers--;
         this.dispatchWork(this.sender());
     }
 
@@ -142,7 +140,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
             return;
         }
 
-        this.log().info(String.format("Worker requested work. %d active hashers, %d active comparators", this.activeHasher, this.activeCompatators));
+        this.log().info(String.format("Worker requested work. %d active hashers, %d active comparators", this.activeHashers, this.activeCompatators));
 
         if (this.activeCompatators < 1 && this.moreHashesToCompare()) {
             this.dispatchComparatorWork(worker);
@@ -152,7 +150,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
             this.dispatchComparatorWork(worker);
             return;
         }
-        if (this.hashesToCompare.size() > this.activeHasher * COMPARATOR_UNDERFLOW_RATIO) {
+        if (this.hashesToCompare.size() > this.activeHashers * COMPARATOR_UNDERFLOW_RATIO) {
             this.dispatchComparatorWork(worker);
             return;
         }
@@ -202,15 +200,18 @@ public class PasswordDispatcher extends AbstractLoggingActor {
             this.self()
         );
         this.nextPasswordToHash += WORK_CHUNK_SIZE;
-        this.activeHasher++;
-        this.log().info(String.format("Dispatching hashing work. Currently utilized %d hashers", this.activeHasher));
+        this.activeHashers++;
+        this.log().info(String.format("Dispatching hashing work. Currently utilized %d hashers", this.activeHashers));
     }
 
     private void handle(Terminated message) {
-        this.log().info(String.format("Watched worker terminated: %s", this.sender()));
         this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder().
                 workerAddress(this.sender().path().address()),
             this.self()
         );
+
+        if (this.activeHashers < 1 && this.activeCompatators < 1) {
+            this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
+        }
     }
 }
