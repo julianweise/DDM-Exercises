@@ -49,6 +49,13 @@ public class Master extends AbstractLoggingActor {
         private int[] plainPasswords;
     }
 
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class BestGenePartnersFoundMessage implements Serializable {
+        private static final long serialVersionUID = -9200570697342104107L;
+
+        private int[] bestGenePartners;
+    }
+
 
     private HashMap<Address, Integer> availableWorkersPerNode = new HashMap<>();
     private int minNumberOfSlaves;
@@ -116,6 +123,8 @@ public class Master extends AbstractLoggingActor {
                 .match(SlaveNodeRegistrationMessage.class, this::handle)
                 .match(SlaveNodeTerminatedMessage.class, this::handle)
                 .match(PasswordsCrackedMessage.class, this::handle)
+                .match(BestGenePartnersFoundMessage.class, this::handle)
+                .match(DispatcherMessages.ReleaseComputationNodeMessage.class, this::handle)
                 .match(Terminated.class, this::handle)
                 .matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
                 .build();
@@ -150,6 +159,11 @@ public class Master extends AbstractLoggingActor {
     private void handle(PasswordsCrackedMessage message) {
         this.sender().tell(PoisonPill.getInstance(), ActorRef.noSender());
         this.log().info(Arrays.toString(message.getPlainPasswords()));
+    }
+
+    private void handle(BestGenePartnersFoundMessage message) {
+        this.sender().tell(PoisonPill.getInstance(), ActorRef.noSender());
+        this.log().info(Arrays.toString(message.getBestGenePartners()));
     }
 
     private void handle(Terminated message) {
