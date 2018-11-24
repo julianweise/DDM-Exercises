@@ -16,7 +16,7 @@ import java.util.*;
 public class PasswordDispatcher extends AbstractLoggingActor {
 
     private static final int LAST_PASSWORD_TO_HASH = 999999;
-    private static final int WORK_CHUNK_SIZE = 1000;
+    private static final int WORK_CHUNK_SIZE = 1500;
     private static final float COMPARATOR_UNDERFLOW_RATIO = 1.5f;
 
     public static Props props(ActorRef master, final List<String> targetPasswordHashes) {
@@ -51,6 +51,14 @@ public class PasswordDispatcher extends AbstractLoggingActor {
 
         // Register at this actor system's reaper
         Reaper.watchWithDefaultReaper(this);
+    }
+
+    @Override
+    public void postStop() throws Exception {
+        super.postStop();
+
+        // Log the stop event
+        this.log().info("Stopped {}.", this.getSelf());
     }
 
     private HashMap<Address, Integer> availableResources = new HashMap<>();
@@ -112,7 +120,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
                 storedCrackedPassword.setPlainPassword(crackedPassword.plainPassword);
                 this.uncrackedTargetPasswordHashes.remove(storedCrackedPassword.hashedPassword);
 
-                if (!this.hasMoreWork()) {
+                if (this.allPasswordsCracked()) {
                     this.submitCrackedPasswords();
                     return;
                 }
@@ -136,11 +144,11 @@ public class PasswordDispatcher extends AbstractLoggingActor {
 
         this.log().info(String.format("Worker requested work. %d active hashers, %d active comparators", this.activeHasher, this.activeCompatators));
 
-        if (this.activeCompatators < 1 && this.hashesToCompare.size() > 0) {
+        if (this.activeCompatators < 1 && this.moreHashesToCompare()) {
             this.dispatchComparatorWork(worker);
             return;
         }
-        if (this.nextPasswordToHash > LAST_PASSWORD_TO_HASH) {
+        if (!this.morePasswordsToHash()) {
             this.dispatchComparatorWork(worker);
             return;
         }
@@ -153,7 +161,19 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     }
 
     private boolean hasMoreWork() {
-        return this.uncrackedTargetPasswordHashes.size() > 0;
+        return !this.allPasswordsCracked() && (this.moreHashesToCompare() || this.morePasswordsToHash());
+    }
+
+    private boolean morePasswordsToHash() {
+        return this.nextPasswordToHash < LAST_PASSWORD_TO_HASH;
+    }
+
+    private boolean moreHashesToCompare() {
+        return this.hashesToCompare.size() > 0;
+    }
+
+    private boolean allPasswordsCracked() {
+        return this.uncrackedTargetPasswordHashes.size() < 1;
     }
 
     private void dispatchComparatorWork(ActorRef comparator) {

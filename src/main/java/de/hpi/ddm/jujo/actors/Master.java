@@ -6,12 +6,7 @@ import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-import akka.actor.AbstractLoggingActor;
-import akka.actor.ActorRef;
-import akka.actor.Address;
-import akka.actor.PoisonPill;
-import akka.actor.Props;
-import akka.actor.Terminated;
+import akka.actor.*;
 import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
 import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import de.siegmar.fastcsv.reader.CsvParser;
@@ -153,6 +148,7 @@ public class Master extends AbstractLoggingActor {
     }
 
     private void handle(PasswordsCrackedMessage message) {
+        this.sender().tell(PoisonPill.getInstance(), ActorRef.noSender());
         this.log().info(Arrays.toString(message.getPlainPasswords()));
     }
 
