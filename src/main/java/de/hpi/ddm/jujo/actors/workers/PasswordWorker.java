@@ -3,6 +3,7 @@ package de.hpi.ddm.jujo.actors.workers;
 import akka.actor.AbstractActor;
 import akka.actor.AbstractLoggingActor;
 import akka.actor.Props;
+import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -37,6 +38,14 @@ public class PasswordWorker extends AbstractLoggingActor {
         private String[] generatedPasswordHashes;
         private int startPassword;
         private int endPassword;
+    }
+
+    @Override
+    public void preStart() throws Exception {
+        super.preStart();
+
+        // Register at this actor system's reaper
+        Reaper.watchWithDefaultReaper(this);
     }
 
     @Override
