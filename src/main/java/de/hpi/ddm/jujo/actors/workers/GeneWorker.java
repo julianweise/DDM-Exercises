@@ -4,6 +4,7 @@ import akka.actor.AbstractActor;
 import akka.actor.AbstractLoggingActor;
 import akka.actor.Props;
 import de.hpi.ddm.jujo.actors.Reaper;
+import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
