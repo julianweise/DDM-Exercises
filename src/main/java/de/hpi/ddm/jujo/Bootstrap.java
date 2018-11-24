@@ -38,8 +38,6 @@ public class Bootstrap {
         // Create the Shepherd
         final ActorRef shepherd = actorSystem.actorOf(Shepherd.props(master), Shepherd.DEFAULT_NAME);
 
-        System.out.println("Stopping...");
-
         // Await termination: The termination should be issued by the reaper
         Bootstrap.awaitTermination(actorSystem);
     }

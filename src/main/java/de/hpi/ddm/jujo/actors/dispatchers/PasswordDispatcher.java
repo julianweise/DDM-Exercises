@@ -129,6 +129,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     }
 
     private void submitCrackedPasswords() {
+        this.log().info("Submitting cracked passwords to master.");
         this.master.tell(Master.PasswordsCrackedMessage.builder()
                 .plainPasswords(this.crackedPasswords.stream().map(CrackedPassword::getPlainPassword).mapToInt(x -> x).toArray())
                 .build(),
@@ -138,6 +139,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
 
     private void dispatchWork(ActorRef worker) {
         if (!this.hasMoreWork()) {
+            this.log().info(String.format("Sending poison pill to Actor %s", worker));
             worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
             return;
         }
@@ -181,7 +183,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
 
         PasswordsHashedMessage workItem = this.hashesToCompare.remove(0);
         comparator.tell(PasswordWorker.ComparePasswordsMessage.builder()
-                .targetPasswordHashes(this.uncrackedTargetPasswordHashes)
+                .targetPasswordHashes(new HashSet<>(this.uncrackedTargetPasswordHashes))
                 .startPassword(workItem.startPassword)
                 .endPassword(workItem.endPassword)
                 .generatedPasswordHashes(workItem.generatedPasswordHashes)
