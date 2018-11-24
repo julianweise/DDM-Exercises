@@ -139,7 +139,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
 
     private void dispatchWork(ActorRef worker) {
         if (!this.hasMoreWork()) {
-            this.log().info(String.format("Sending poison pill to Actor %s", worker));
+            this.log().info(String.format("Sending poison pill to %s", worker));
             worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
             return;
         }

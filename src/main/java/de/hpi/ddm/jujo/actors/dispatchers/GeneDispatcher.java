@@ -10,6 +10,7 @@ import akka.actor.Props;
 import akka.remote.RemoteScope;
 import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.Reaper;
+import de.hpi.ddm.jujo.actors.workers.GeneWorker;
 import de.hpi.ddm.jujo.actors.workers.PasswordWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -57,17 +58,13 @@ public class GeneDispatcher extends AbstractLoggingActor {
 	private HashMap<Address, Integer> availableResources = new HashMap<>();
 	private ActorRef master;
 	private List<String> geneSequences;
-	private int totalGeneSequencesSize;
 	private int[] bestGenePartners;
+	private int nextOriginalPerson = 0;
 
 	private GeneDispatcher(ActorRef master, List<String> geneSequences) {
 		this.geneSequences = geneSequences;
 		this.master = master;
-
 		this.bestGenePartners = new int[geneSequences.size()];
-		for (String geneSequence : geneSequences) {
-			totalGeneSequencesSize += geneSequence.length();
-		}
 	}
 
 	@Override
@@ -83,16 +80,17 @@ public class GeneDispatcher extends AbstractLoggingActor {
 		this.availableResources.putIfAbsent(message.getNodeAddress(), message.getNumberOfWorkers());
 
 		for (int i = 0; i < message.getNumberOfWorkers(); ++i) {
-			// TODO: create gene worker
-			// TODO: initialize worker
-			// TODO: dispatch work to worker
+			ActorRef worker = this.getContext().actorOf(GeneWorker.props().withDeploy(
+					new Deploy(new RemoteScope(message.getNodeAddress())))
+			);
+			this.initializeWorker(worker);
+			this.dispatchWork(worker);
 		}
 	}
 
 	private void initializeWorker(ActorRef worker) {
-		int sentBytes = 0;
 		int nextGeneSequenceIndex = 0;
-		int messageSize = 0;
+		int messageSize;
 		List<String> geneSequencesInNextMessage = new ArrayList<>();
 
 		while (nextGeneSequenceIndex < this.geneSequences.size()) {
@@ -111,16 +109,41 @@ public class GeneDispatcher extends AbstractLoggingActor {
 				nextGeneSequenceIndex++;
 			}
 
-			// TODO: send message to worker
+			worker.tell(GeneWorker.AddGeneSequencesMessage.builder()
+					.geneSequences(geneSequencesInNextMessage.toArray(new String[0])).build(),
+				this.self()
+			);
 		}
-	}
-
-	private void dispatchWork(ActorRef worker) {
-		// TODO:
 	}
 
 	private void handle(BestGenePartnerFoundMessage message) {
 		this.bestGenePartners[message.getOriginalPerson()] = message.getBestPartner();
 		dispatchWork(this.sender());
+
+		if (message.getOriginalPerson() >= this.geneSequences.size() - 1) {
+			this.submitBestGenePartners();
+		}
+	}
+
+	private void submitBestGenePartners() {
+		// TODO: send gene partners to master
+	}
+
+	private void dispatchWork(ActorRef worker) {
+		if (!this.hasMoreWork()) {
+			this.log().info(String.format("Sending poison pill to %s", worker));
+			worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
+			return;
+		}
+
+		worker.tell(GeneWorker.FindBestGenePartnerMessage.builder()
+				.originalPerson(this.nextOriginalPerson).build(),
+			this.self()
+		);
+		this.nextOriginalPerson++;
+	}
+
+	private boolean hasMoreWork() {
+		return this.nextOriginalPerson < this.geneSequences.size();
 	}
 }
