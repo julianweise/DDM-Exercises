@@ -13,14 +13,12 @@ public class DispatcherMessages {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class AddComputationNodeMessage implements Serializable {
         private static final long serialVersionUID = 7594619467258919392L;
-        private Address nodeAddress;
-        private int numberOfWorkers;
+        private Address[] workerAddresses;
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class ReleaseComputationNodeMessage implements Serializable {
         private static final long serialVersionUID = -5301177795851229122L;
-        private Address nodeAddress;
-        private int numberOfWorkers;
+        private Address[] workerAddresses;
     }
 }

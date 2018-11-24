@@ -61,7 +61,6 @@ public class PasswordDispatcher extends AbstractLoggingActor {
         this.log().info("Stopped {}.", this.getSelf());
     }
 
-    private HashMap<Address, Integer> availableResources = new HashMap<>();
     private Set<String> uncrackedTargetPasswordHashes;
     private ArrayList<CrackedPassword> crackedPasswords = new ArrayList<>();
     private List<PasswordsHashedMessage> hashesToCompare = new ArrayList<>();
@@ -89,11 +88,9 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     }
 
     private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-        this.availableResources.putIfAbsent(message.getNodeAddress(), message.getNumberOfWorkers());
-
-        for (int i = 0; i < message.getNumberOfWorkers(); ++i) {
+        for (Address workerAddress : message.getWorkerAddresses()) {
             ActorRef worker = this.getContext().actorOf(PasswordWorker.props().withDeploy(
-                    new Deploy(new RemoteScope(message.getNodeAddress())))
+                    new Deploy(new RemoteScope(workerAddress)))
             );
 
             this.dispatchWork(worker);

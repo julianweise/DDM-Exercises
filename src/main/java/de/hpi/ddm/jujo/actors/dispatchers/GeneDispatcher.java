@@ -55,7 +55,6 @@ public class GeneDispatcher extends AbstractLoggingActor {
 		this.log().info("Stopped {}.", this.getSelf());
 	}
 
-	private HashMap<Address, Integer> availableResources = new HashMap<>();
 	private ActorRef master;
 	private List<String> geneSequences;
 	private int[] bestGenePartners;
@@ -77,11 +76,9 @@ public class GeneDispatcher extends AbstractLoggingActor {
 	}
 
 	private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-		this.availableResources.putIfAbsent(message.getNodeAddress(), message.getNumberOfWorkers());
-
-		for (int i = 0; i < message.getNumberOfWorkers(); ++i) {
+		for (Address workerAddress : message.getWorkerAddresses()) {
 			ActorRef worker = this.getContext().actorOf(GeneWorker.props().withDeploy(
-					new Deploy(new RemoteScope(message.getNodeAddress())))
+					new Deploy(new RemoteScope(workerAddress)))
 			);
 			this.initializeWorker(worker);
 			this.dispatchWork(worker);

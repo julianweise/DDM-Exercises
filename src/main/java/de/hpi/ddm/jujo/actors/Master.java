@@ -28,6 +28,11 @@ public class Master extends AbstractLoggingActor {
         return Props.create(Master.class, () -> new Master(numLocalWorkers, minNumberOfSlaves, pathToInputFile));
     }
 
+    public static class WorkDistribution {
+        public static final float FOR_PASSWORD_CRACKING = 0.4f;
+        public static final float FOR_GENE_ANALYSIS = 0.6f;
+    }
+
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class SlaveNodeRegistrationMessage implements Serializable {
@@ -59,17 +64,18 @@ public class Master extends AbstractLoggingActor {
     }
 
 
-    private HashMap<Address, Integer> availableWorkersPerNode = new HashMap<>();
-    private int minNumberOfSlaves;
+    private List<Address> availableWorkers = new ArrayList<>();
+    private int currentNumberOfSlaves = 0;
+    private int minNumberOfSlavesToStartWork;
     private Map<String, List<String>> inputData = new HashMap<>();
 
-    public Master(int numLocalWorkers, int minNumberOfSlaves, String pathToInputFile) {
+    public Master(int numLocalWorkers, int minNumberOfSlavesToStartWork, String pathToInputFile) {
         try {
             this.parseInputFile(pathToInputFile);
         } catch (IOException e) {
             this.log().error(e, "Error while processing input file.");
         }
-        this.minNumberOfSlaves = minNumberOfSlaves + 1; // local actor system counts as one slave
+        this.minNumberOfSlavesToStartWork = minNumberOfSlavesToStartWork + 1; // local actor system counts as one slave
         this.self().tell(SlaveNodeRegistrationMessage.builder()
                 .slaveAddress(this.self().path().address())
                 .numberOfWorkers(numLocalWorkers)
@@ -134,55 +140,54 @@ public class Master extends AbstractLoggingActor {
 
     private void handle(SlaveNodeRegistrationMessage message) {
         this.log().info(String.format("New slave registered from %s", message.slaveAddress.toString()));
-        this.availableWorkersPerNode.putIfAbsent(message.slaveAddress, message.numberOfWorkers);
-        this.log().info(String.format("At least %d slaves required. Currently present number of slaves is %d", this.minNumberOfSlaves, this.availableWorkersPerNode.size()));
-        if (this.minNumberOfSlaves == this.availableWorkersPerNode.size()) {
-            this.analyseGenePartners();
+        for (int i = 0; i < message.numberOfWorkers; i++) {
+            this.availableWorkers.add(message.slaveAddress);
         }
+        this.log().info(String.format("At least %d slaves required. Currently present number of slaves is %d", this.minNumberOfSlavesToStartWork, this.availableWorkers.size()));
+        if (this.minNumberOfSlavesToStartWork == this.availableWorkers.size()) {
+            int geneWorkers = (int) Math.ceil(WorkDistribution.FOR_GENE_ANALYSIS * this.availableWorkers.size()) - 1;
+            this.analyseGenePartners(geneWorkers);
+            this.crackPasswords(this.availableWorkers.size() - geneWorkers);
+        }
+        // TODO Dynamically assign new arriving resources
     }
 
-    private void crackPasswords() {
+    private void assignWorkers(ActorRef workDispatcher, int numberOfWorkers) {
+        List<Address> workers = this.availableWorkers.subList(
+                0,
+                Math.min(numberOfWorkers - 1, this.availableWorkers.size() - 1)
+        );
+
+        workDispatcher.tell(DispatcherMessages.AddComputationNodeMessage.builder()
+                .workerAddresses(workers.toArray(new Address[0]))
+                .build(),
+            this.self()
+        );
+        workers.clear();
+    }
+
+    private void crackPasswords(int numberOfWorkers) {
         ActorRef passwordDispatcher = this.context().system().actorOf(PasswordDispatcher.props(
                 this.self(),
                 this.inputData.get(INPUT_DATA_PASSWORD_COLUMN))
         );
-
-        for(Map.Entry<Address, Integer> entry : this.availableWorkersPerNode.entrySet()) {
-            passwordDispatcher.tell(
-                    DispatcherMessages.AddComputationNodeMessage.builder()
-                            .nodeAddress(entry.getKey())
-                            .numberOfWorkers(entry.getValue())
-                            .build(),
-                    this.self()
-            );
-        }
+        this.assignWorkers(passwordDispatcher, numberOfWorkers);
     }
 
-    private void analyseGenePartners() {
+    private void analyseGenePartners(int numberOfWorkers) {
         ActorRef geneDispatcher = this.context().system().actorOf(GeneDispatcher.props(
                 this.self(),
                 this.inputData.get(INPUT_DATA_GENE_COLUMN))
         );
-
-        for(Map.Entry<Address, Integer> entry : this.availableWorkersPerNode.entrySet()) {
-            geneDispatcher.tell(
-                    DispatcherMessages.AddComputationNodeMessage.builder()
-                            .nodeAddress(entry.getKey())
-                            .numberOfWorkers(entry.getValue())
-                            .build(),
-                    this.self()
-            );
-        }
+        this.assignWorkers(geneDispatcher, numberOfWorkers);
     }
 
     private void handle(SlaveNodeTerminatedMessage message) {
-        this.availableWorkersPerNode.remove(message.slaveAddress);
+        this.availableWorkers.remove(message.slaveAddress);
     }
 
     private void handle(DispatcherMessages.ReleaseComputationNodeMessage message) {
-        Address node = message.getNodeAddress();
-        this.availableWorkersPerNode.putIfAbsent(node, 0);
-        this.availableWorkersPerNode.computeIfPresent(node, (a, currentValue) -> currentValue + message.getNumberOfWorkers());
+        this.availableWorkers.addAll(Arrays.asList(message.getWorkerAddresses()));
         // TODO Add method to redispatch available resources
     }
 
