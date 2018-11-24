@@ -156,6 +156,13 @@ public class Master extends AbstractLoggingActor {
         this.availableWorkersPerNode.remove(message.slaveAddress);
     }
 
+    private void handle(DispatcherMessages.ReleaseComputationNodeMessage message) {
+        Address node = message.getNodeAddress();
+        this.availableWorkersPerNode.putIfAbsent(node, 0);
+        this.availableWorkersPerNode.computeIfPresent(node, (a, currentValue) -> currentValue + message.getNumberOfWorkers());
+        // TODO Add method to redispatch available resources
+    }
+
     private void handle(PasswordsCrackedMessage message) {
         this.sender().tell(PoisonPill.getInstance(), ActorRef.noSender());
         this.log().info(Arrays.toString(message.getPlainPasswords()));

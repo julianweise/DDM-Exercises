@@ -16,4 +16,11 @@ public class DispatcherMessages {
         private Address nodeAddress;
         private int numberOfWorkers;
     }
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class ReleaseComputationNodeMessage implements Serializable {
+        private static final long serialVersionUID = -5301177795851229122L;
+        private Address nodeAddress;
+        private int numberOfWorkers;
+    }
 }
