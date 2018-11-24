@@ -83,6 +83,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
                 .match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
                 .match(PasswordsHashedMessage.class, this::handle)
                 .match(PasswordsCrackedMessage.class, this::handle)
+                .match(Terminated.class, this::handle)
                 .matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
                 .build();
     }
@@ -92,7 +93,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
             ActorRef worker = this.getContext().actorOf(PasswordWorker.props().withDeploy(
                     new Deploy(new RemoteScope(workerAddress)))
             );
-
+            this.context().watch(worker);
             this.dispatchWork(worker);
         }
     }
@@ -205,4 +206,11 @@ public class PasswordDispatcher extends AbstractLoggingActor {
         this.log().info(String.format("Dispatching hashing work. Currently utilized %d hashers", this.activeHasher));
     }
 
+    private void handle(Terminated message) {
+        this.log().info(String.format("Watched worker terminated: %s", this.sender()));
+        this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder().
+                workerAddress(this.sender().path().address()),
+            this.self()
+        );
+    }
 }

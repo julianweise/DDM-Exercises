@@ -7,6 +7,7 @@ import akka.actor.Address;
 import akka.actor.Deploy;
 import akka.actor.PoisonPill;
 import akka.actor.Props;
+import akka.actor.Terminated;
 import akka.remote.RemoteScope;
 import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.Reaper;
@@ -71,6 +72,7 @@ public class GeneDispatcher extends AbstractLoggingActor {
 		return receiveBuilder()
 				.match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
 				.match(BestGenePartnerFoundMessage.class, this::handle)
+				.match(Terminated.class, this::handle)
 				.matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
 				.build();
 	}
@@ -80,6 +82,7 @@ public class GeneDispatcher extends AbstractLoggingActor {
 			ActorRef worker = this.getContext().actorOf(GeneWorker.props().withDeploy(
 					new Deploy(new RemoteScope(workerAddress)))
 			);
+			this.context().watch(worker);
 			this.initializeWorker(worker);
 			this.dispatchWork(worker);
 		}
@@ -149,5 +152,13 @@ public class GeneDispatcher extends AbstractLoggingActor {
 
 	private boolean hasMoreWork() {
 		return this.nextOriginalPerson < this.geneSequences.size();
+	}
+
+	private void handle(Terminated message) {
+		this.log().info(String.format("Watched worker terminated: %s", this.sender()));
+		this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder().
+						workerAddress(this.sender().path().address()),
+				this.self()
+		);
 	}
 }
