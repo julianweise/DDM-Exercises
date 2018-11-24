@@ -55,5 +55,4 @@ public class AkkaUtils {
         );
         return remoteConfig.withFallback(baseConfig);
     }
-
 }

@@ -89,7 +89,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     }
 
     private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-        ActorRef worker = this.getContext().actorOf(PasswordWorker.props().withDeploy(
+        ActorRef worker = this.context().actorOf(PasswordWorker.props().withDeploy(
                 new Deploy(new RemoteScope(message.getWorkerAddress())))
         );
         this.context().watch(worker);

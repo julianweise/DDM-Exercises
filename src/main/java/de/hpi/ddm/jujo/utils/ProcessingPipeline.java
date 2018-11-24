@@ -5,12 +5,14 @@ import akka.actor.Address;
 import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
 import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
+import de.hpi.ddm.jujo.actors.dispatchers.LinearCombinationDispatcher;
 import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +27,8 @@ public class ProcessingPipeline {
         private ActorRef taskDispatcher;
         private Task nextStep;
         private int[] results;
+        private long startTimestamp;
+        private long endTimestamp;
         @Builder.Default private TaskState taskState = TaskState.INITIALIZED;
         @Builder.Default private Task[] requiredSteps = new Task[0];
         @Builder.Default private int numberOfAssignedWorkers = 0;
@@ -94,6 +98,18 @@ public class ProcessingPipeline {
                 .build();
     }
 
+    private PipelineStep initializeLinearCombinationStep(int[] plainPasswords) {
+    	ActorRef linearCombinationDispatcher = this.master.context().actorOf(
+			    LinearCombinationDispatcher.props(this.master.self(), plainPasswords));
+    	this.master.context().watch(linearCombinationDispatcher);
+    	return PipelineStep.builder()
+			    .task(Task.LINEAR_COMBINATION)
+			    .taskDispatcher(linearCombinationDispatcher)
+			    .nextStep(Task.HASH_MINING)
+			    .build()
+			    .setRequiredStepsConvenience(Task.PASSWORD_CRACKING);
+    }
+
     public void start() {
         this.enabled = true;
         this.assignAvailableWorkers();
@@ -117,15 +133,26 @@ public class ProcessingPipeline {
     }
 
     public void passwordCrackingFinished(int[] plainPasswords) {
-        PipelineStep step = this.pipelineSteps.get(Task.PASSWORD_CRACKING);
-        step.setTaskState(TaskState.TERMINATED);
-        step.setResults(plainPasswords);
+        this.finishStep(Task.PASSWORD_CRACKING, plainPasswords);
+
+        this.pipelineSteps.put(Task.LINEAR_COMBINATION, this.initializeLinearCombinationStep(plainPasswords));
     }
 
     public void geneAnalysisFinished(int[] bestMatchingPartners) {
-        PipelineStep step = this.pipelineSteps.get(Task.GENE_ANALYSIS);
-        step.setTaskState(TaskState.TERMINATED);
-        step.setResults(bestMatchingPartners);
+    	this.finishStep(Task.GENE_ANALYSIS, bestMatchingPartners);
+    }
+
+    public void linearCombincationFinished(int[] prefixes) {
+    	this.finishStep(Task.LINEAR_COMBINATION, prefixes);
+    }
+
+    private void finishStep(Task stepTask, int[] stepResults) {
+    	PipelineStep step = this.pipelineSteps.get(stepTask);
+    	step.setTaskState(TaskState.TERMINATED);
+    	step.setResults(stepResults);
+    	step.setEndTimestamp(System.currentTimeMillis());
+
+    	this.master.log().info(String.format("%s finished after %d ms", step.getTask(), step.getEndTimestamp() - step.getStartTimestamp()));
     }
 
     private void assignAvailableWorkers() {
@@ -158,6 +185,11 @@ public class ProcessingPipeline {
     }
 
     private void assignWorkerToStep(PipelineStep step) {
+    	if (step.getTaskState() == TaskState.INITIALIZED) {
+    		step.setStartTimestamp(System.currentTimeMillis());
+    		step.setTaskState(TaskState.RUNNING);
+	    }
+
         step.increaseNumberOfAssignedWorkers();
         Address worker = this.availableWorkers.remove(0);
         step.getTaskDispatcher().tell(DispatcherMessages.AddComputationNodeMessage.builder()
