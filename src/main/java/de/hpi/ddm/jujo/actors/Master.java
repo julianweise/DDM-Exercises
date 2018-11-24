@@ -8,6 +8,7 @@ import java.util.*;
 
 import akka.actor.*;
 import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
+import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
 import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import de.siegmar.fastcsv.reader.CsvParser;
 import de.siegmar.fastcsv.reader.CsvReader;
@@ -21,6 +22,7 @@ public class Master extends AbstractLoggingActor {
 
     public static final String DEFAULT_NAME = "master";
     private static final String INPUT_DATA_PASSWORD_COLUMN = "Password";
+    private static final String INPUT_DATA_GENE_COLUMN = "Gene";
 
     public static Props props(final int numLocalWorkers, final int minNumberOfSlaves, final String pathToInputFile) {
         return Props.create(Master.class, () -> new Master(numLocalWorkers, minNumberOfSlaves, pathToInputFile));
@@ -135,20 +137,41 @@ public class Master extends AbstractLoggingActor {
         this.availableWorkersPerNode.putIfAbsent(message.slaveAddress, message.numberOfWorkers);
         this.log().info(String.format("At least %d slaves required. Currently present number of slaves is %d", this.minNumberOfSlaves, this.availableWorkersPerNode.size()));
         if (this.minNumberOfSlaves == this.availableWorkersPerNode.size()) {
-            ActorRef passwordDispatcher = this.context().system().actorOf(PasswordDispatcher.props(
+            this.analyseGenePartners();
+        }
+    }
+
+    private void crackPasswords() {
+        ActorRef passwordDispatcher = this.context().system().actorOf(PasswordDispatcher.props(
                 this.self(),
                 this.inputData.get(INPUT_DATA_PASSWORD_COLUMN))
-            );
+        );
 
-            for(Map.Entry<Address, Integer> entry : this.availableWorkersPerNode.entrySet()) {
-                passwordDispatcher.tell(
-                        DispatcherMessages.AddComputationNodeMessage.builder()
-                        .nodeAddress(entry.getKey())
-                        .numberOfWorkers(entry.getValue())
-                        .build(),
+        for(Map.Entry<Address, Integer> entry : this.availableWorkersPerNode.entrySet()) {
+            passwordDispatcher.tell(
+                    DispatcherMessages.AddComputationNodeMessage.builder()
+                            .nodeAddress(entry.getKey())
+                            .numberOfWorkers(entry.getValue())
+                            .build(),
                     this.self()
-                );
-            }
+            );
+        }
+    }
+
+    private void analyseGenePartners() {
+        ActorRef geneDispatcher = this.context().system().actorOf(GeneDispatcher.props(
+                this.self(),
+                this.inputData.get(INPUT_DATA_GENE_COLUMN))
+        );
+
+        for(Map.Entry<Address, Integer> entry : this.availableWorkersPerNode.entrySet()) {
+            geneDispatcher.tell(
+                    DispatcherMessages.AddComputationNodeMessage.builder()
+                            .nodeAddress(entry.getKey())
+                            .numberOfWorkers(entry.getValue())
+                            .build(),
+                    this.self()
+            );
         }
     }
 
