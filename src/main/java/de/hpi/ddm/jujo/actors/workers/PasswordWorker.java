@@ -106,6 +106,12 @@ public class PasswordWorker extends AbstractLoggingActor {
                     break;
                 }
             }
+
+
+            if (crackedPasswords.size() >= message.targetPasswordHashes.size()) {
+                // found all passwords for this message
+                break;
+            }
         }
         this.sendCrackedPasswords(crackedPasswords);
     }
