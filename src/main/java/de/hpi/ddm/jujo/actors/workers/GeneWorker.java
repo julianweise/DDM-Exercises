@@ -65,7 +65,7 @@ public class GeneWorker extends AbstractLoggingActor {
 
     private void handle(FindBestGenePartnerMessage message) {
         int bestPartner = this.longestOverlapPartner(message.originalPerson);
-        this.sender().tell(BestGenePartnerFoundMessage.builder()
+        this.sender().tell(GeneDispatcher.BestGenePartnerFoundMessage.builder()
                 .originalPerson(message.originalPerson)
                 .bestPartner(bestPartner)
                 .build(),
