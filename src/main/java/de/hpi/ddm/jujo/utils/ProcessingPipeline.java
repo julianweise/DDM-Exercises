@@ -169,6 +169,7 @@ public class ProcessingPipeline {
         this.finishStep(Task.PASSWORD_CRACKING);
 
         this.pipelineSteps.put(Task.LINEAR_COMBINATION, this.initializeLinearCombinationStep(plainPasswords));
+        this.assignAvailableWorkers();
     }
 
     public void geneAnalysisFinished(int[] bestMatchingPartners) {
@@ -176,10 +177,11 @@ public class ProcessingPipeline {
     	this.finishStep(Task.GENE_ANALYSIS);
 
         if (this.pipelineSteps.get(Task.LINEAR_COMBINATION).getTaskState() == TaskState.TERMINATED) {
-            this.initializedHashMiningStep(
+        	this.pipelineSteps.put(Task.HASH_MINING, this.initializedHashMiningStep(
                     this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults(),
-                    this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults()
-            );
+                    this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults())
+	        );
+	        this.assignAvailableWorkers();
         }
     }
 
@@ -188,10 +190,11 @@ public class ProcessingPipeline {
         this.finishStep(Task.LINEAR_COMBINATION);
 
         if (this.pipelineSteps.get(Task.GENE_ANALYSIS).getTaskState() == TaskState.TERMINATED) {
-            this.initializedHashMiningStep(
-                    this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults(),
-                    this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults()
-            );
+	        this.pipelineSteps.put(Task.HASH_MINING, this.initializedHashMiningStep(
+			        this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults(),
+			        this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults())
+	        );
+	        this.assignAvailableWorkers();
         }
     }
 
