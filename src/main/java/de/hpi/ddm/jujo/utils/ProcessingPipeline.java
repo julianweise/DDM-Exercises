@@ -218,11 +218,13 @@ public class ProcessingPipeline {
             return;
         }
         while (this.availableWorkers.size() > 0) {
-            this.assignNextAvailableWorker();
+            if (!this.assignNextAvailableWorker()) {
+                break;
+            }
         }
     }
 
-    private void assignNextAvailableWorker() {
+    private boolean assignNextAvailableWorker() {
         PipelineStep stepToEnhance = null;
         for(PipelineStep step : this.getStepsWhichNeedMoreWorkers()) {
             if (step.getMaxNumberOfWorkers() <= step.getNumberOfAssignedWorkers()) {
@@ -237,9 +239,10 @@ public class ProcessingPipeline {
             }
         }
         if (stepToEnhance == null) {
-            return;
+            return false;
         }
         this.assignWorkerToStep(stepToEnhance);
+        return true;
     }
 
     private void assignWorkerToStep(PipelineStep step) {

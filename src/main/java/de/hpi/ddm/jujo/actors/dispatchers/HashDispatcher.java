@@ -4,6 +4,7 @@ import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.PoisonPill;
 import akka.actor.Props;
+import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.workers.HashWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
