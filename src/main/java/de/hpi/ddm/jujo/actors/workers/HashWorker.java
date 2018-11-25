@@ -1,10 +1,8 @@
 package de.hpi.ddm.jujo.actors.workers;
 
 import akka.actor.AbstractActor;
-import akka.actor.AbstractLoggingActor;
 import akka.actor.Props;
 import de.hpi.ddm.jujo.actors.AbstractReapedActor;
-import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.dispatchers.HashDispatcher;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -1,10 +1,8 @@
 package de.hpi.ddm.jujo.actors.workers;
 
 import akka.actor.AbstractActor;
-import akka.actor.AbstractLoggingActor;
 import akka.actor.Props;
 import de.hpi.ddm.jujo.actors.AbstractReapedActor;
-import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -53,7 +51,7 @@ public class GeneWorker extends AbstractReapedActor {
     private void handle(FindBestGenePartnerMessage message) {
         this.log().debug(String.format("Received message to find best gene partner for person %d", message.originalPerson));
         int bestPartner = this.longestOverlapPartner(message.originalPerson);
-        this.log().debug(String.format("Best gene partner for original person %d is %d", message.originalPerson, bestPartner));
+        this.log().info(String.format("Best gene partner for original person %d is %d", message.originalPerson, bestPartner));
         this.sender().tell(GeneDispatcher.BestGenePartnerFoundMessage.builder()
                 .originalPerson(message.originalPerson)
                 .bestPartner(bestPartner)

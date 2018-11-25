@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,14 +60,13 @@ public class Master extends AbstractReapedActor {
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class BestGenePartnersFoundMessage implements Serializable {
-        private static final long serialVersionUID = -9200570697342104107L;
-
-        private int[] bestGenePartners;
+	    private static final long serialVersionUID = 6308603188915924805L;
+	    private int[] bestGenePartners;
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class LinearCombinationFoundMessage implements  Serializable {
-	    private static final long serialVersionUID = -645751953498374126L;
+	    private static final long serialVersionUID = 7387505804031264277L;
 	    private int[] prefixes;
     }
 
@@ -153,18 +153,21 @@ public class Master extends AbstractReapedActor {
 
     private void handle(DispatcherMessages.ReleaseComputationNodeMessage message) {
         this.log().debug(String.format("Released worker %s available for new work", message.getWorkerAddress().toString()));
-        this.pipeline.addWorker(message.getWorkerAddress());
+        this.pipeline.addWorker(message.getWorkerAddress(), this.sender());
     }
 
     private void handle(PasswordsCrackedMessage message) {
+        this.log().info(String.format("Passwords cracked: %s", Arrays.toString(message.getPlainPasswords())));
         this.pipeline.passwordCrackingFinished(message.getPlainPasswords());
     }
 
     private void handle(BestGenePartnersFoundMessage message) {
+        this.log().info(String.format("Best gene partners found: %s", Arrays.toString(message.getBestGenePartners())));
         this.pipeline.geneAnalysisFinished(message.getBestGenePartners());
     }
 
     private void handle(LinearCombinationFoundMessage message) {
+        this.log().info(String.format("Password prefixes found: %s", Arrays.toString(message.getPrefixes())));
 		this.pipeline.linearCombinationFinished(message.prefixes);
     }
 

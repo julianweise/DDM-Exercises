@@ -38,6 +38,8 @@ public class ProcessingPipeline {
         void increaseNumberOfAssignedWorkers() {
             this.numberOfAssignedWorkers += 1;
         }
+
+        public void decrementNumberOfAssignedWorkers() { this.numberOfAssignedWorkers -= 1; }
     }
 
     private enum Task {
@@ -51,6 +53,7 @@ public class ProcessingPipeline {
     private enum TaskState {
         INITIALIZED,
         RUNNING,
+        ABOUT_TO_TERMINATE,
         TERMINATED
     }
 
@@ -124,9 +127,20 @@ public class ProcessingPipeline {
         this.assignAvailableWorkers();
     }
 
-    public void addWorker(Address workerAddress) {
-        this.availableWorkers.add(workerAddress);
-        this.assignAvailableWorkers();
+    public void addWorker(Address workerAddress, ActorRef returningWorkDispatcher) {
+    	for (PipelineStep step : this.pipelineSteps.values()) {
+    		if (step.getTaskDispatcher() != returningWorkDispatcher) {
+    			continue;
+		    }
+
+		    step.decrementNumberOfAssignedWorkers();
+    		this.master.log().info(String.format("%s has now %d workers", step.getTask(), step.getNumberOfAssignedWorkers()));
+		    if (step.getTaskState() == TaskState.RUNNING) {
+			    step.setTaskState(TaskState.ABOUT_TO_TERMINATE);
+		    }
+		    break;
+	    }
+	    this.addWorker(workerAddress);
     }
 
     public void addWorkers(Address workerAddress, int times) {
@@ -135,6 +149,11 @@ public class ProcessingPipeline {
         }
         this.assignAvailableWorkers();
     }
+
+	private void addWorker(Address workerAddress) {
+		this.availableWorkers.add(workerAddress);
+		this.assignAvailableWorkers();
+	}
 
     public void addWorkers(List<Address> workerAddresses) {
         this.availableWorkers.addAll(workerAddresses);
@@ -205,7 +224,7 @@ public class ProcessingPipeline {
 
     private void assignNextAvailableWorker() {
         PipelineStep stepToEnhance = null;
-        for(PipelineStep step : this.getEnabledSteps()) {
+        for(PipelineStep step : this.getStepsWhichNeedMoreWorkers()) {
             if (step.getMaxNumberOfWorkers() <= step.getNumberOfAssignedWorkers()) {
                 continue;
             }
@@ -237,18 +256,22 @@ public class ProcessingPipeline {
                 .build(),
             this.master.self()
         );
+        this.master.log().info(String.format("%s has now %d workers", step.getTask(), step.getNumberOfAssignedWorkers()));
     }
 
-    private List<PipelineStep> getEnabledSteps() {
+    private List<PipelineStep> getStepsWhichNeedMoreWorkers() {
         return this.pipelineSteps.values().stream()
-                .filter(this::isStepEnabled)
+                .filter(this::needsMoreWorkers)
                 .collect(Collectors.toList());
     }
 
-    private boolean isStepEnabled(PipelineStep step) {
+    private boolean needsMoreWorkers(PipelineStep step) {
         if (step.getTaskState() == TaskState.TERMINATED) {
             return false;
         }
+	    if (step.getTaskState() == TaskState.ABOUT_TO_TERMINATE) {
+		    return false;
+	    }
         for (Task requiredStep : step.getRequiredSteps()) {
             if (this.pipelineSteps.get(requiredStep).getTaskState() != TaskState.TERMINATED) {
                 return false;

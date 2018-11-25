@@ -1,16 +1,10 @@
 package de.hpi.ddm.jujo.actors.dispatchers;
 
 import akka.actor.AbstractActor;
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
-import akka.actor.Deploy;
 import akka.actor.PoisonPill;
 import akka.actor.Props;
-import akka.actor.Terminated;
-import akka.remote.RemoteScope;
-import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.Master;
-import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.workers.GeneWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,6 +13,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class GeneDispatcher extends AbstractWorkDispatcher {
@@ -83,7 +78,7 @@ public class GeneDispatcher extends AbstractWorkDispatcher {
 	}
 
 	private void handle(BestGenePartnerFoundMessage message) {
-		--this.activeAnalyzers;
+		this.activeAnalyzers -= 1;
 		this.bestGenePartners[message.getOriginalPerson()] = message.getBestPartner();
 		dispatchWork(this.sender());
 
@@ -97,8 +92,11 @@ public class GeneDispatcher extends AbstractWorkDispatcher {
 	}
 
 	private void submitBestGenePartners() {
+		this.log().info(String.format("Submitting best gene partners: %s", Arrays.toString(this.bestGenePartners)));
+
 		this.master.tell(Master.BestGenePartnersFoundMessage.builder()
-				.bestGenePartners(this.bestGenePartners).build(),
+				.bestGenePartners(this.bestGenePartners)
+				.build(),
 			this.self()
 		);
 	}
@@ -112,11 +110,12 @@ public class GeneDispatcher extends AbstractWorkDispatcher {
 		}
 
 		worker.tell(GeneWorker.FindBestGenePartnerMessage.builder()
-				.originalPerson(this.nextOriginalPerson).build(),
+				.originalPerson(this.nextOriginalPerson)
+				.build(),
 			this.self()
 		);
-		++this.nextOriginalPerson;
-		++this.activeAnalyzers;
+		this.nextOriginalPerson += 1;
+		this.activeAnalyzers += 1;
 	}
 
 	private boolean hasMoreWork() {

@@ -1,16 +1,10 @@
 package de.hpi.ddm.jujo.actors.dispatchers;
 
 import akka.actor.AbstractActor;
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
-import akka.actor.Deploy;
 import akka.actor.PoisonPill;
 import akka.actor.Props;
-import akka.actor.Terminated;
-import akka.remote.RemoteScope;
-import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.Master;
-import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.workers.LinearCombinationWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -141,11 +135,6 @@ public class LinearCombinationDispatcher extends AbstractWorkDispatcher {
 	private void submitLinearCombination(BigInteger prefixes) {
 		int[] numericPrefixes = new int[this.plainPasswords.length];
 		for (int i = 0; i < numericPrefixes.length; ++i) {
-			if (prefixes.bitCount() < i) {
-				numericPrefixes[i] = -1;
-				continue;
-			}
-
 			numericPrefixes[i] = prefixes.testBit(i) ? 1 : -1;
 		}
 

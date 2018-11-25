@@ -1,6 +1,5 @@
 package de.hpi.ddm.jujo.actors;
 
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorSelection;
 import akka.actor.Address;
 import akka.actor.Cancellable;

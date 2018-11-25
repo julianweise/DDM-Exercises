@@ -1,15 +1,9 @@
 package de.hpi.ddm.jujo.actors.dispatchers;
 
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
-import akka.actor.Deploy;
 import akka.actor.PoisonPill;
 import akka.actor.Props;
-import akka.actor.Terminated;
-import akka.remote.RemoteScope;
-import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.Master;
-import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.workers.PasswordWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

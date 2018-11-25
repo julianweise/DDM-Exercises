@@ -1,6 +1,5 @@
 package de.hpi.ddm.jujo.actors;
 
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
 import akka.actor.Address;
 import akka.actor.PoisonPill;
