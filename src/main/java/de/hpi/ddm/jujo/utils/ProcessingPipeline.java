@@ -66,6 +66,8 @@ public class ProcessingPipeline {
     private List<Address> availableWorkers = new ArrayList<>();
     private Master master;
     private boolean enabled = false;
+    private long startTimestamp;
+    private long endTimestamp;
 
     public ProcessingPipeline(Master master) {
         this.master = master;
@@ -128,6 +130,7 @@ public class ProcessingPipeline {
 
     public void start() {
         this.enabled = true;
+        this.startTimestamp = System.currentTimeMillis();
         this.assignAvailableWorkers();
     }
 
@@ -201,15 +204,20 @@ public class ProcessingPipeline {
     public void hashMiningFinished(String[] hashes) {
         this.finishStep(Task.HASH_MINING);
 
+        this.endTimestamp = System.currentTimeMillis();
+
         this.printFinalResults(hashes);
     }
 
     private void printFinalResults(String[] results) {
-        System.console().printf(" ================ [FINAL RESULTS] ================");
+        System.out.println(" ================ [FINAL RESULTS] ================");
         for(int i = 0; i < results.length; i++) {
-            System.console().printf("%d \t %s", i, results[i] );
+            System.out.printf("%d \t %s\n", i, results[i] );
         }
-        System.console().printf(" ================ [FINAL RESULTS] ================");
+        System.out.println("\n");
+        System.out.printf("[CALCULATION TIME] %d ms \n", this.endTimestamp - this.startTimestamp);
+        System.out.println("\n");
+        System.out.println(" ================ [FINAL RESULTS] ================");
     }
 
     private void finishStep(Task stepTask) {
