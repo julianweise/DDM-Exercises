@@ -43,7 +43,7 @@ public class ProcessingPipeline {
             this.numberOfAssignedWorkers += 1;
         }
 
-        public void decrementNumberOfAssignedWorkers() { this.numberOfAssignedWorkers -= 1; }
+        void decrementNumberOfAssignedWorkers() { this.numberOfAssignedWorkers -= 1; }
     }
 
     private enum Task {
@@ -210,14 +210,17 @@ public class ProcessingPipeline {
     }
 
     private void printFinalResults(String[] results) {
-        System.out.println(" ================ [FINAL RESULTS] ================");
+        System.out.println("\n\n\n");
+        System.out.println(" ========================== [FINAL RESULTS] ==========================");
         for(int i = 0; i < results.length; i++) {
-            System.out.printf("%d \t %s\n", i, results[i] );
+            System.out.printf("%d \t %s\n", i + 1, results[i] );
         }
-        System.out.println("\n");
-        System.out.printf("[CALCULATION TIME] %d ms \n", this.endTimestamp - this.startTimestamp);
-        System.out.println("\n");
-        System.out.println(" ================ [FINAL RESULTS] ================");
+        System.out.println(" ========================== [FINAL RESULTS] ==========================");
+        System.out.println("\n\n");
+        System.out.println(" ======================= [PERFORMANCE RESULTS] =======================");
+        System.out.printf("Duration: %d ms \n", this.endTimestamp - this.startTimestamp);
+        System.out.println(" ======================= [PERFORMANCE RESULTS] =======================");
+        System.out.println("\n\n\n");
     }
 
     private void finishStep(Task stepTask) {
