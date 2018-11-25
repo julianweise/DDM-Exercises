@@ -1,6 +1,5 @@
 package de.hpi.ddm.jujo.actors;
 
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
 import akka.actor.Address;
 import akka.actor.PoisonPill;
@@ -71,6 +70,12 @@ public class Master extends AbstractReapedActor {
 	    private int[] prefixes;
     }
 
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class HashFoundMessage implements Serializable {
+        private static final long serialVersionUID = 1810179102712812178L;
+        private String[] hashes;
+    }
+
     private int currentNumberOfSlaves = 0;
     private int minNumberOfSlavesToStartWork;
     private Map<String, List<String>> inputData = new HashMap<>();
@@ -126,6 +131,7 @@ public class Master extends AbstractReapedActor {
                 .match(PasswordsCrackedMessage.class, this::handle)
                 .match(BestGenePartnersFoundMessage.class, this::handle)
 		        .match(LinearCombinationFoundMessage.class, this::handle)
+                .match(HashFoundMessage.class, this::handle)
                 .match(DispatcherMessages.ReleaseComputationNodeMessage.class, this::handle)
                 .match(Terminated.class, this::handle)
                 .matchAny(this::handleAny)
@@ -160,6 +166,10 @@ public class Master extends AbstractReapedActor {
 
     private void handle(LinearCombinationFoundMessage message) {
 		this.pipeline.linearCombinationFinished(message.prefixes);
+    }
+
+    private void handle(HashFoundMessage message) {
+        this.pipeline.hashMiningFinished(message.hashes);
     }
 
     private void handle(Terminated message) {
