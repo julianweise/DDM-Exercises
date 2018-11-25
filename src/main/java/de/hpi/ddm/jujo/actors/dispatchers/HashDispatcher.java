@@ -1,15 +1,10 @@
 package de.hpi.ddm.jujo.actors.dispatchers;
 
 import akka.actor.AbstractActor;
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
-import akka.actor.Deploy;
 import akka.actor.PoisonPill;
 import akka.actor.Props;
-import akka.actor.Terminated;
-import akka.remote.RemoteScope;
-import de.hpi.ddm.jujo.actors.AbstractReapedActor;
-import de.hpi.ddm.jujo.actors.Reaper;
+import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.workers.HashWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,17 +31,20 @@ public class HashDispatcher extends AbstractWorkDispatcher {
     private int[] prefixes;
     private String[] hashes;
     private int nextPersonToHash = 0;
+    private int numberOfUnhashedPartners;
 
     private HashDispatcher(ActorRef master, int[] partnerIds, int[] prefixes) {
         super(master, HashWorker.props());
         this.partnerIds = partnerIds;
         this.prefixes = prefixes;
         this.hashes = new String[partnerIds.length];
+        this.numberOfUnhashedPartners = this.partnerIds.length;
     }
 
     @Override
     public AbstractActor.Receive createReceive() {
-        return handleDefaultMessages(receiveBuilder());
+        return handleDefaultMessages(receiveBuilder()
+                .match(HashFoundMessage.class, this::handle));
     }
 
     @Override
@@ -56,10 +54,22 @@ public class HashDispatcher extends AbstractWorkDispatcher {
 
     private void handle(HashFoundMessage message) {
         this.activeSolvers--;
+        this.numberOfUnhashedPartners--;
         this.hashes[message.originalPerson] = message.hash;
         this.dispatchWork(this.sender());
 
-        // TODO check whether all hashes have been generated. If so: Inform master
+        if (this.numberOfUnhashedPartners < 1) {
+            this.submitHashes();
+        }
+    }
+
+    private void submitHashes() {
+        this.log().debug("Submitting generated partner hashes to master.");
+        this.master.tell(Master.HashFoundMessage.builder()
+                .hashes(this.hashes)
+                .build(),
+            this.self()
+        );
     }
 
     @Override
@@ -80,6 +90,7 @@ public class HashDispatcher extends AbstractWorkDispatcher {
             this.self()
         );
         this.nextPersonToHash++;
+        this.numberOfUnhashedPartners--;
     }
 
     @Override
