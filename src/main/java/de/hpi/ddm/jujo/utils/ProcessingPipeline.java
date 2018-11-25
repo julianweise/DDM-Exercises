@@ -3,10 +3,7 @@ package de.hpi.ddm.jujo.utils;
 import akka.actor.ActorRef;
 import akka.actor.Address;
 import de.hpi.ddm.jujo.actors.Master;
-import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
-import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
-import de.hpi.ddm.jujo.actors.dispatchers.LinearCombinationDispatcher;
-import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
+import de.hpi.ddm.jujo.actors.dispatchers.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -44,6 +41,7 @@ public class ProcessingPipeline {
     }
 
     private enum Task {
+        NONE,
         PASSWORD_CRACKING,
         GENE_ANALYSIS,
         LINEAR_COMBINATION,
@@ -109,6 +107,18 @@ public class ProcessingPipeline {
 			    .setRequiredStepsConvenience(Task.PASSWORD_CRACKING);
     }
 
+    private PipelineStep initializedHashMiningStep(int[] partnerIds, int[] prefixes) {
+        ActorRef hashDispatcher = this.master.context().actorOf(
+                HashDispatcher.props(this.master.self(), partnerIds, prefixes));
+        this.master.context().watch(hashDispatcher);
+        return PipelineStep.builder()
+                .task(Task.HASH_MINING)
+                .taskDispatcher(hashDispatcher)
+                .nextStep(Task.NONE)
+                .build()
+                .setRequiredStepsConvenience(Task.GENE_ANALYSIS, Task.LINEAR_COMBINATION);
+    }
+
     public void start() {
         this.enabled = true;
         this.assignAvailableWorkers();
@@ -132,23 +142,53 @@ public class ProcessingPipeline {
     }
 
     public void passwordCrackingFinished(int[] plainPasswords) {
-        this.finishStep(Task.PASSWORD_CRACKING, plainPasswords);
+        this.pipelineSteps.get(Task.PASSWORD_CRACKING).setResults(plainPasswords);
+        this.finishStep(Task.PASSWORD_CRACKING);
 
         this.pipelineSteps.put(Task.LINEAR_COMBINATION, this.initializeLinearCombinationStep(plainPasswords));
     }
 
     public void geneAnalysisFinished(int[] bestMatchingPartners) {
-    	this.finishStep(Task.GENE_ANALYSIS, bestMatchingPartners);
+        this.pipelineSteps.get(Task.GENE_ANALYSIS).setResults(bestMatchingPartners);
+    	this.finishStep(Task.GENE_ANALYSIS);
+
+        if (this.pipelineSteps.get(Task.LINEAR_COMBINATION).getTaskState() == TaskState.TERMINATED) {
+            this.initializedHashMiningStep(
+                    this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults(),
+                    this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults()
+            );
+        }
     }
 
     public void linearCombinationFinished(int[] prefixes) {
-    	this.finishStep(Task.LINEAR_COMBINATION, prefixes);
+        this.pipelineSteps.get(Task.LINEAR_COMBINATION).setResults(prefixes);
+        this.finishStep(Task.LINEAR_COMBINATION);
+
+        if (this.pipelineSteps.get(Task.GENE_ANALYSIS).getTaskState() == TaskState.TERMINATED) {
+            this.initializedHashMiningStep(
+                    this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults(),
+                    this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults()
+            );
+        }
     }
 
-    private void finishStep(Task stepTask, int[] stepResults) {
+    public void hashMiningFinished(String[] hashes) {
+        this.finishStep(Task.HASH_MINING);
+
+        this.printFinalResults(hashes);
+    }
+
+    private void printFinalResults(String[] results) {
+        System.console().printf(" ================ [FINAL RESULTS] ================");
+        for(int i = 0; i < results.length; i++) {
+            System.console().printf("%d \t %s", i, results[i] );
+        }
+        System.console().printf(" ================ [FINAL RESULTS] ================");
+    }
+
+    private void finishStep(Task stepTask) {
     	PipelineStep step = this.pipelineSteps.get(stepTask);
     	step.setTaskState(TaskState.TERMINATED);
-    	step.setResults(stepResults);
     	step.setEndTimestamp(System.currentTimeMillis());
 
     	this.master.log().info(String.format("%s finished after %d ms", step.getTask(), step.getEndTimestamp() - step.getStartTimestamp()));
