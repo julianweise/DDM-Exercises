@@ -48,14 +48,12 @@ public class HashWorker extends AbstractReapedActor {
     }
 
     private String findHash(int content, String fullPrefix) {
-        Random rand = new Random(13);
-
-        int nonce;
+        int nonce = 0;
         while (true) {
-            nonce = rand.nextInt();
-            String hash = this.hash(content + nonce);
-            if (hash.startsWith(fullPrefix))
+            String hash = this.hash(content + nonce++);
+            if (hash.startsWith(fullPrefix)) {
                 return hash;
+            }
         }
     }
 

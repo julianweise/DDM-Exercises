@@ -16,7 +16,7 @@ import java.math.BigInteger;
 
 public class LinearCombinationDispatcher extends AbstractWorkDispatcher {
 
-	private static final int PREFIX_CHUNK_SIZE = 1000;
+	private static final int PREFIX_CHUNK_SIZE = 10000;
 
 	public static Props props(ActorRef master, int[] plainPasswords) {
 		return Props.create(LinearCombinationDispatcher.class, () -> new LinearCombinationDispatcher(master, plainPasswords));

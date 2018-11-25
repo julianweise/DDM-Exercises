@@ -28,6 +28,7 @@ import java.util.Map;
 public class Master extends AbstractReapedActor {
 
     public static final String DEFAULT_NAME = "master";
+    public static final String INPUT_DATA_NAME_COLUMN = "Name";
     public static final String INPUT_DATA_PASSWORD_COLUMN = "Password";
     public static final String INPUT_DATA_GENE_COLUMN = "Gene";
 

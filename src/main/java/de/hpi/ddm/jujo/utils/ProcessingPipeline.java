@@ -14,6 +14,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,7 @@ public class ProcessingPipeline {
                 .task(Task.HASH_MINING)
                 .taskDispatcher(hashDispatcher)
                 .nextStep(Task.NONE)
+		        .maxNumberOfWorkers(partnerIds.length)
                 .build()
                 .setRequiredStepsConvenience(Task.GENE_ANALYSIS, Task.LINEAR_COMBINATION);
     }
@@ -209,18 +211,72 @@ public class ProcessingPipeline {
         this.printFinalResults(hashes);
     }
 
-    private void printFinalResults(String[] results) {
+    private void printFinalResults(String[] finalHashes) {
+    	List<String> names = this.master.getInputDataForColumn(Master.INPUT_DATA_NAME_COLUMN);
+    	int[] passwords = this.pipelineSteps.get(Task.PASSWORD_CRACKING).getResults();
+    	int[] linearPrefixes = this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults();
+    	int[] matchingGenePartners = this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults();
+
         System.out.println("\n\n\n");
         System.out.println(" ========================== [FINAL RESULTS] ==========================");
-        for(int i = 0; i < results.length; i++) {
-            System.out.printf("%d \t %s\n", i + 1, results[i] );
+        this.printFinalResultsTableHeader();
+        for(int i = 0; i < finalHashes.length; i++) {
+            this.printFinalResultsRow(
+            		i,
+		            names.get(i),
+		            passwords[i],
+		            linearPrefixes[i],
+		            names.get(matchingGenePartners[i]),
+		            finalHashes[i]
+            );
         }
         System.out.println(" ========================== [FINAL RESULTS] ==========================");
         System.out.println("\n\n");
         System.out.println(" ======================= [PERFORMANCE RESULTS] =======================");
-        System.out.printf("Duration: %d ms \n", this.endTimestamp - this.startTimestamp);
+        for (PipelineStep step : this.pipelineSteps.values()) {
+        	System.out.printf(" %s: %d ms \n", step.getTask(), step.getEndTimestamp() - step.getStartTimestamp());
+        }
+
+        System.out.println("\n");
+	    System.out.printf(" Total: %d ms \n", this.endTimestamp - this.startTimestamp);
         System.out.println(" ======================= [PERFORMANCE RESULTS] =======================");
         System.out.println("\n\n\n");
+    }
+
+	private static final String OUTPUT_ID_COLUMN                    = "ID          ";
+    private static final String OUTPUT_NAME_COLUMN                  = "Name        ";
+    private static final String OUTPUT_PASSWORD_COLUMN              = "Password    ";
+    private static final String OUTPUT_PASSWORD_PREFIX_COLUMN       = "Prefix      ";
+    private static final String OUTPUT_BEST_GENE_PARTNER_COLUMN     = "Partner     ";
+    private static final String OUTPUT_FINAL_HASH_COLUMN            = "Hash        ";
+    private static final int OUTPUT_COLUMN_LENGTH = 12;
+
+    private void printFinalResultsTableHeader() {
+    	String columns = String.format(" %s| %s| %s| %s| %s| %s",
+			    OUTPUT_ID_COLUMN,
+			    OUTPUT_NAME_COLUMN,
+			    OUTPUT_PASSWORD_COLUMN,
+			    OUTPUT_PASSWORD_PREFIX_COLUMN,
+			    OUTPUT_BEST_GENE_PARTNER_COLUMN,
+			    OUTPUT_FINAL_HASH_COLUMN);
+    	char[] line = new char[columns.length()];
+	    Arrays.fill(line, '-');
+
+	    System.out.printf("%s\n%s\n", columns, new String(line));
+    }
+
+    private void printFinalResultsRow(int id, String name, int password, int passwordPrefix, String genePartner, String hash) {
+	    System.out.printf(" %s| %s| %s| %s| %s| %s\n",
+			    this.padRight(id),
+			    this.padRight(name),
+			    this.padRight(password),
+			    this.padRight(passwordPrefix),
+			    this.padRight(genePartner),
+			    this.padRight(hash));
+    }
+
+    private String padRight(Object input) {
+    	return String.format("%1$-" + OUTPUT_COLUMN_LENGTH + "s", input);
     }
 
     private void finishStep(Task stepTask) {
