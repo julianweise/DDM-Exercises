@@ -92,8 +92,6 @@ public class GeneDispatcher extends AbstractWorkDispatcher {
 	}
 
 	private void submitBestGenePartners() {
-		this.log().info(String.format("Submitting best gene partners: %s", Arrays.toString(this.bestGenePartners)));
-
 		this.master.tell(Master.BestGenePartnersFoundMessage.builder()
 				.bestGenePartners(this.bestGenePartners)
 				.build(),

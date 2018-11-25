@@ -51,7 +51,7 @@ public class GeneWorker extends AbstractReapedActor {
     private void handle(FindBestGenePartnerMessage message) {
         this.log().debug(String.format("Received message to find best gene partner for person %d", message.originalPerson));
         int bestPartner = this.longestOverlapPartner(message.originalPerson);
-        this.log().info(String.format("Best gene partner for original person %d is %d", message.originalPerson, bestPartner));
+        this.log().debug(String.format("Best gene partner for original person %d is %d", message.originalPerson, bestPartner));
         this.sender().tell(GeneDispatcher.BestGenePartnerFoundMessage.builder()
                 .originalPerson(message.originalPerson)
                 .bestPartner(bestPartner)

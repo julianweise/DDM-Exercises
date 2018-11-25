@@ -3,7 +3,11 @@ package de.hpi.ddm.jujo.utils;
 import akka.actor.ActorRef;
 import akka.actor.Address;
 import de.hpi.ddm.jujo.actors.Master;
-import de.hpi.ddm.jujo.actors.dispatchers.*;
+import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
+import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
+import de.hpi.ddm.jujo.actors.dispatchers.HashDispatcher;
+import de.hpi.ddm.jujo.actors.dispatchers.LinearCombinationDispatcher;
+import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -134,7 +138,7 @@ public class ProcessingPipeline {
 		    }
 
 		    step.decrementNumberOfAssignedWorkers();
-    		this.master.log().info(String.format("%s has now %d workers", step.getTask(), step.getNumberOfAssignedWorkers()));
+    		this.master.log().info(String.format("%s released 1 worker and has now %d workers", step.getTask(), step.getNumberOfAssignedWorkers()));
 		    if (step.getTaskState() == TaskState.RUNNING) {
 			    step.setTaskState(TaskState.ABOUT_TO_TERMINATE);
 		    }
