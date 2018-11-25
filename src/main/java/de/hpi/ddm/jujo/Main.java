@@ -1,12 +1,12 @@
 package de.hpi.ddm.jujo;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.Parameters;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 public class Main {
 
@@ -71,6 +71,9 @@ public class Main {
 
         @Parameter(names = {"-i", "--input"}, description = "input file endPassword process")
         String pathToInputFile;
+
+        @Parameter(names = {"-h", "--host"}, description = "host address of this system")
+        String host = getDefaultHost();
     }
 
     @Parameters(commandDescription = "start a slave actor system")

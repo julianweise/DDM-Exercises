@@ -1,5 +1,8 @@
 package de.hpi.ddm.jujo.utils;
 
+import com.typesafe.config.Config;
+import com.typesafe.config.ConfigFactory;
+
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -9,9 +12,6 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import com.typesafe.config.Config;
-import com.typesafe.config.ConfigFactory;
 
 public class AkkaUtils {
 
@@ -55,5 +55,4 @@ public class AkkaUtils {
         );
         return remoteConfig.withFallback(baseConfig);
     }
-
 }

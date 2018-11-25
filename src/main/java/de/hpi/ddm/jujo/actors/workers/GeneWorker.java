@@ -1,9 +1,8 @@
 package de.hpi.ddm.jujo.actors.workers;
 
 import akka.actor.AbstractActor;
-import akka.actor.AbstractLoggingActor;
 import akka.actor.Props;
-import de.hpi.ddm.jujo.actors.Reaper;
+import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,7 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class GeneWorker extends AbstractLoggingActor {
+public class GeneWorker extends AbstractReapedActor {
 
     public static Props props() {
         return Props.create(GeneWorker.class);
@@ -33,22 +32,6 @@ public class GeneWorker extends AbstractLoggingActor {
         private int originalPerson;
     }
 
-    @Override
-    public void preStart() throws Exception {
-        super.preStart();
-
-        // Register at this actor system's reaper
-        Reaper.watchWithDefaultReaper(this);
-    }
-
-    @Override
-    public void postStop() throws Exception {
-        super.postStop();
-
-        // Log the stop event
-        this.log().info("Stopped {}.", this.getSelf());
-    }
-
     private List<String> geneSequences = new ArrayList<>();
 
     @Override
@@ -56,19 +39,19 @@ public class GeneWorker extends AbstractLoggingActor {
         return receiveBuilder()
                 .match(AddGeneSequencesMessage.class, this::handle)
                 .match(FindBestGenePartnerMessage.class, this::handle)
-                .matchAny(object -> this.log().info("Received unknown message: \"{}\"", object.toString()))
+                .matchAny(this::handleAny)
                 .build();
     }
 
     private void handle(AddGeneSequencesMessage message) {
-        this.log().info(String.format("Received %d gene sequences for gene analysis", message.geneSequences.length));
+        this.log().debug(String.format("Received %d gene sequences for gene analysis", message.geneSequences.length));
         this.geneSequences.addAll(Arrays.asList(message.geneSequences));
     }
 
     private void handle(FindBestGenePartnerMessage message) {
-        this.log().info(String.format("Received message to find best gene partner for person %d", message.originalPerson));
+        this.log().debug(String.format("Received message to find best gene partner for person %d", message.originalPerson));
         int bestPartner = this.longestOverlapPartner(message.originalPerson);
-        this.log().info(String.format("Best gene partner for original person %d is %d", message.originalPerson, bestPartner));
+        this.log().debug(String.format("Best gene partner for original person %d is %d", message.originalPerson, bestPartner));
         this.sender().tell(GeneDispatcher.BestGenePartnerFoundMessage.builder()
                 .originalPerson(message.originalPerson)
                 .bestPartner(bestPartner)

@@ -1,15 +1,11 @@
 package de.hpi.ddm.jujo.actors;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-
-import akka.actor.*;
+import akka.actor.ActorRef;
+import akka.actor.Address;
+import akka.actor.PoisonPill;
+import akka.actor.Props;
+import akka.actor.Terminated;
 import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
-import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
-import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import de.hpi.ddm.jujo.utils.ProcessingPipeline;
 import de.siegmar.fastcsv.reader.CsvParser;
 import de.siegmar.fastcsv.reader.CsvReader;
@@ -19,9 +15,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-public class Master extends AbstractLoggingActor {
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class Master extends AbstractReapedActor {
 
     public static final String DEFAULT_NAME = "master";
+    public static final String INPUT_DATA_NAME_COLUMN = "Name";
     public static final String INPUT_DATA_PASSWORD_COLUMN = "Password";
     public static final String INPUT_DATA_GENE_COLUMN = "Gene";
 
@@ -31,7 +38,7 @@ public class Master extends AbstractLoggingActor {
 
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static class SlaveNodeRegistrationMessage implements Serializable {
+    static class SlaveNodeRegistrationMessage implements Serializable {
 
         private static final long serialVersionUID = -1682543505601299772L;
         private Address slaveAddress;
@@ -39,7 +46,7 @@ public class Master extends AbstractLoggingActor {
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static class SlaveNodeTerminatedMessage implements Serializable {
+    static class SlaveNodeTerminatedMessage implements Serializable {
 
         private static final long serialVersionUID = -3053321777422537935L;
         private Address slaveAddress;
@@ -54,21 +61,20 @@ public class Master extends AbstractLoggingActor {
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class BestGenePartnersFoundMessage implements Serializable {
-        private static final long serialVersionUID = -9200570697342104107L;
-
-        private int[] bestGenePartners;
+	    private static final long serialVersionUID = 6308603188915924805L;
+	    private int[] bestGenePartners;
     }
 
-    @Override
-    public void preStart() throws Exception {
-        super.preStart();
-        Reaper.watchWithDefaultReaper(this);
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class LinearCombinationFoundMessage implements  Serializable {
+	    private static final long serialVersionUID = 7387505804031264277L;
+	    private int[] prefixes;
     }
 
-    @Override
-    public void postStop() throws Exception {
-        super.postStop();
-        this.log().info("Stopped {}.", this.getSelf());
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class HashFoundMessage implements Serializable {
+        private static final long serialVersionUID = 1810179102712812178L;
+        private String[] hashes;
     }
 
     private int currentNumberOfSlaves = 0;
@@ -76,7 +82,7 @@ public class Master extends AbstractLoggingActor {
     private Map<String, List<String>> inputData = new HashMap<>();
     private ProcessingPipeline pipeline;
 
-    public Master(int numLocalWorkers, int minNumberOfSlavesToStartWork, String pathToInputFile) {
+    private Master(int numLocalWorkers, int minNumberOfSlavesToStartWork, String pathToInputFile) {
         try {
             this.parseInputFile(pathToInputFile);
         } catch (IOException e) {
@@ -108,7 +114,7 @@ public class Master extends AbstractLoggingActor {
             CsvRow row = csvParser.nextRow();
             for (String column : csvParser.getHeader()) {
                 this.inputData.put(column, new ArrayList<>());
-                this.log().info(String.format("Input file column detected %s", column));
+                this.log().debug(String.format("Input file column detected %s", column));
             }
             do {
                 for (String column : this.inputData.keySet()) {
@@ -125,9 +131,11 @@ public class Master extends AbstractLoggingActor {
                 .match(SlaveNodeTerminatedMessage.class, this::handle)
                 .match(PasswordsCrackedMessage.class, this::handle)
                 .match(BestGenePartnersFoundMessage.class, this::handle)
+		        .match(LinearCombinationFoundMessage.class, this::handle)
+                .match(HashFoundMessage.class, this::handle)
                 .match(DispatcherMessages.ReleaseComputationNodeMessage.class, this::handle)
                 .match(Terminated.class, this::handle)
-                .matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
+                .matchAny(this::handleAny)
                 .build();
     }
 
@@ -145,15 +153,27 @@ public class Master extends AbstractLoggingActor {
     }
 
     private void handle(DispatcherMessages.ReleaseComputationNodeMessage message) {
-        this.pipeline.addWorker(message.getWorkerAddress());
+        this.log().debug(String.format("Released worker %s available for new work", message.getWorkerAddress().toString()));
+        this.pipeline.addWorker(message.getWorkerAddress(), this.sender());
     }
 
     private void handle(PasswordsCrackedMessage message) {
+        this.log().info(String.format("Passwords cracked: %s", Arrays.toString(message.getPlainPasswords())));
         this.pipeline.passwordCrackingFinished(message.getPlainPasswords());
     }
 
     private void handle(BestGenePartnersFoundMessage message) {
+        this.log().info(String.format("Best gene partners found: %s", Arrays.toString(message.getBestGenePartners())));
         this.pipeline.geneAnalysisFinished(message.getBestGenePartners());
+    }
+
+    private void handle(LinearCombinationFoundMessage message) {
+        this.log().info(String.format("Password prefixes found: %s", Arrays.toString(message.getPrefixes())));
+		this.pipeline.linearCombinationFinished(message.prefixes);
+    }
+
+    private void handle(HashFoundMessage message) {
+        this.pipeline.hashMiningFinished(message.hashes);
     }
 
     private void handle(Terminated message) {

@@ -1,9 +1,5 @@
 package de.hpi.ddm.jujo.actors;
 
-import java.io.Serializable;
-import java.util.concurrent.TimeUnit;
-
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorSelection;
 import akka.actor.Address;
 import akka.actor.Cancellable;
@@ -17,7 +13,10 @@ import lombok.NoArgsConstructor;
 import scala.concurrent.ExecutionContextExecutor;
 import scala.concurrent.duration.Duration;
 
-public class Slave extends AbstractLoggingActor {
+import java.io.Serializable;
+import java.util.concurrent.TimeUnit;
+
+public class Slave extends AbstractReapedActor {
 
     public static final String DEFAULT_NAME = "slave";
 
@@ -38,24 +37,12 @@ public class Slave extends AbstractLoggingActor {
         private static final long serialVersionUID = 3226726675135579564L;
     }
 
-    // A scheduling item endPassword keep on trying endPassword reconnect as regularly
     private Cancellable connectSchedule;
 
     @Override
     public void preStart() throws Exception {
         super.preStart();
-
-        // Register at this actor system's reaper
-        Reaper.watchWithDefaultReaper(this);
-
-        // Listen for disassociation with the master
         this.getContext().getSystem().eventStream().subscribe(this.getSelf(), DisassociatedEvent.class);
-    }
-
-    @Override
-    public void postStop() throws Exception {
-        super.postStop();
-        this.log().info("Stopped {}.", this.getSelf());
     }
 
     @Override
@@ -64,7 +51,7 @@ public class Slave extends AbstractLoggingActor {
                 .match(RegisterAtShepherdMessage.class, this::handle)
                 .match(AcknowledgementMessage.class, this::handle)
                 .match(DisassociatedEvent.class, this::handle)
-                .matchAny(object -> this.log().info("Received unknown message: \"{}\" ({})", object, object.getClass()))
+                .matchAny(this::handleAny)
                 .build();
     }
 

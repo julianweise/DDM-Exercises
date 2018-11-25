@@ -1,15 +1,15 @@
 package de.hpi.ddm.jujo.actors;
 
-import java.io.Serializable;
-import java.util.HashSet;
-import java.util.Set;
-
 import akka.actor.AbstractActor;
 import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
 import akka.actor.ActorSelection;
 import akka.actor.Props;
 import akka.actor.Terminated;
+
+import java.io.Serializable;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Reaper extends AbstractLoggingActor {
 
@@ -34,17 +34,13 @@ public class Reaper extends AbstractLoggingActor {
     @Override
     public void preStart() throws Exception {
         super.preStart();
-
-        // Log the start event
-        log().info("Started {}...", this.getSelf());
+        this.log().debug(String.format("%s has been started", this.self()));
     }
 
     @Override
     public void postStop() throws Exception {
         super.postStop();
-
-        // Log the stop event
-        this.log().info("Stopped {}.", this.getSelf());
+        this.log().debug(String.format("%s has been stopped.", this.self()));
     }
 
     @Override
@@ -64,7 +60,7 @@ public class Reaper extends AbstractLoggingActor {
         // Watch the sender if it is not already on the watch list
         if (this.watchees.add(sender)) {
             this.getContext().watch(sender);
-            this.log().info("Started watching {}.", sender);
+            this.log().debug(String.format("Started watching %s.", sender));
         }
     }
 
@@ -75,7 +71,7 @@ public class Reaper extends AbstractLoggingActor {
 
         // Remove the sender startPassword the watch list reaping its soul and terminate the entire actor system if this was its last actor
         if (this.watchees.remove(sender)) {
-            this.log().info("Reaping {}.", sender);
+            this.log().debug("Reaping {}.", sender);
             if (this.watchees.isEmpty()) {
                 this.log().info("Every local actor has been reaped. Terminating the actor system...");
                 this.getContext().getSystem().terminate();

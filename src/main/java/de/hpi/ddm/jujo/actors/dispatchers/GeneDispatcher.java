@@ -1,16 +1,10 @@
 package de.hpi.ddm.jujo.actors.dispatchers;
 
 import akka.actor.AbstractActor;
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
-import akka.actor.Address;
-import akka.actor.Deploy;
 import akka.actor.PoisonPill;
 import akka.actor.Props;
-import akka.actor.Terminated;
-import akka.remote.RemoteScope;
 import de.hpi.ddm.jujo.actors.Master;
-import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.workers.GeneWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,9 +13,10 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
-public class GeneDispatcher extends AbstractLoggingActor {
+public class GeneDispatcher extends AbstractWorkDispatcher {
 
 	private static final int MAXIMUM_GENE_LIST_SIZE = 126000; // message size in bytes
 
@@ -36,54 +31,25 @@ public class GeneDispatcher extends AbstractLoggingActor {
 		private int bestPartner;
 	}
 
-	@Override
-	public void preStart() throws Exception {
-		super.preStart();
-
-		// Register at this actor system's reaper
-		Reaper.watchWithDefaultReaper(this);
-	}
-
-	@Override
-	public void postStop() throws Exception {
-		super.postStop();
-
-		// Log the stop event
-		this.log().info("Stopped {}.", this.getSelf());
-	}
-
-	private ActorRef master;
 	private List<String> geneSequences;
 	private int[] bestGenePartners;
 	private int nextOriginalPerson = 0;
 	private int activeAnalyzers = 0;
 
 	private GeneDispatcher(ActorRef master, List<String> geneSequences) {
+		super(master, GeneWorker.props());
 		this.geneSequences = geneSequences;
-		this.master = master;
 		this.bestGenePartners = new int[geneSequences.size()];
 	}
 
 	@Override
 	public AbstractActor.Receive createReceive() {
-		return receiveBuilder()
-				.match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
-				.match(BestGenePartnerFoundMessage.class, this::handle)
-				.match(Terminated.class, this::handle)
-				.matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
-				.build();
+		return handleDefaultMessages(receiveBuilder()
+				.match(BestGenePartnerFoundMessage.class, this::handle));
 	}
 
-	private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-		ActorRef worker = this.getContext().actorOf(GeneWorker.props().withDeploy(
-				new Deploy(new RemoteScope(message.getWorkerAddress())))
-		);
-		this.context().watch(worker);
-		this.initializeWorker(worker);
-		this.dispatchWork(worker);
-	}
-
-	private void initializeWorker(ActorRef worker) {
+	@Override
+	protected void initializeWorker(ActorRef worker) {
 		int nextGeneSequenceIndex = 0;
 		int messageSize;
 		List<String> geneSequencesInNextMessage = new ArrayList<>();
@@ -112,7 +78,7 @@ public class GeneDispatcher extends AbstractLoggingActor {
 	}
 
 	private void handle(BestGenePartnerFoundMessage message) {
-		--this.activeAnalyzers;
+		this.activeAnalyzers -= 1;
 		this.bestGenePartners[message.getOriginalPerson()] = message.getBestPartner();
 		dispatchWork(this.sender());
 
@@ -127,39 +93,31 @@ public class GeneDispatcher extends AbstractLoggingActor {
 
 	private void submitBestGenePartners() {
 		this.master.tell(Master.BestGenePartnersFoundMessage.builder()
-				.bestGenePartners(this.bestGenePartners).build(),
+				.bestGenePartners(this.bestGenePartners)
+				.build(),
 			this.self()
 		);
 	}
 
-	private void dispatchWork(ActorRef worker) {
+	@Override
+	protected void dispatchWork(ActorRef worker) {
 		if (!this.hasMoreWork()) {
-			this.log().info(String.format("Sending poison pill to %s", worker));
+			this.log().debug(String.format("Sending poison pill to %s", worker));
 			worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
 			return;
 		}
 
 		worker.tell(GeneWorker.FindBestGenePartnerMessage.builder()
-				.originalPerson(this.nextOriginalPerson).build(),
+				.originalPerson(this.nextOriginalPerson)
+				.build(),
 			this.self()
 		);
-		++this.nextOriginalPerson;
-		++this.activeAnalyzers;
+		this.nextOriginalPerson += 1;
+		this.activeAnalyzers += 1;
 	}
 
-	private boolean hasMoreWork() {
+	@Override
+	protected boolean hasMoreWork() {
 		return this.nextOriginalPerson < this.geneSequences.size();
-	}
-
-	private void handle(Terminated message) {
-		this.log().info(String.format("Watched worker terminated: %s", this.sender()));
-		this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder().
-						workerAddress(this.sender().path().address()),
-				this.self()
-		);
-
-		if (this.activeAnalyzers < 1) {
-			this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
-		}
 	}
 }

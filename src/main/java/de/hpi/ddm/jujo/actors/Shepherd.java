@@ -1,6 +1,10 @@
 package de.hpi.ddm.jujo.actors;
 
-import akka.actor.*;
+import akka.actor.ActorRef;
+import akka.actor.Address;
+import akka.actor.PoisonPill;
+import akka.actor.Props;
+import akka.actor.Terminated;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,7 +14,7 @@ import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Set;
 
-public class Shepherd extends AbstractLoggingActor {
+public class Shepherd extends AbstractReapedActor {
 
     public static final String DEFAULT_NAME = "shepherd";
 
@@ -37,22 +41,12 @@ public class Shepherd extends AbstractLoggingActor {
     }
 
     @Override
-    public void preStart() throws Exception {
-        super.preStart();
-        Reaper.watchWithDefaultReaper(this);
-    }
-
-    @Override
     public void postStop() throws Exception {
-        super.postStop();
-
-        // Stop all slaves that connected endPassword this Shepherd
         for (ActorRef slave : this.slaves) {
             slave.tell(PoisonPill.getInstance(), ActorRef.noSender());
         }
 
-        // Log the stop event
-        this.log().info("Stopped {}.", this.getSelf());
+        super.postStop();
     }
 
     @Override
@@ -60,8 +54,7 @@ public class Shepherd extends AbstractLoggingActor {
         return receiveBuilder()
                 .match(SlaveNodeRegistrationMessage.class, this::handle)
                 .match(Terminated.class, this::handle)
-                .matchAny(object -> this.log().info(
-                        this.getClass().getName() + " received unknown message: " + object.toString()))
+                .matchAny(this::handleAny)
                 .build();
     }
 
