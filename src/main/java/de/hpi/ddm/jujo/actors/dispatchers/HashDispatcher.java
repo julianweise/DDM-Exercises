@@ -18,7 +18,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 
-public class HashDispatcher extends AbstractReapedActor {
+public class HashDispatcher extends AbstractWorkDispatcher {
 
     public static Props props(ActorRef master, int[] partnerIds, int prefixes[]) {
         return Props.create(HashDispatcher.class, () -> new HashDispatcher(master, partnerIds, prefixes));
@@ -31,7 +31,6 @@ public class HashDispatcher extends AbstractReapedActor {
         private String hash;
     }
 
-    private ActorRef master;
     private int activeSolvers;
     private int[] partnerIds;
     private int[] prefixes;
@@ -39,7 +38,7 @@ public class HashDispatcher extends AbstractReapedActor {
     private int nextPersonToHash = 0;
 
     private HashDispatcher(ActorRef master, int[] partnerIds, int[] prefixes) {
-        this.master = master;
+        super(master, HashWorker.props());
         this.partnerIds = partnerIds;
         this.prefixes = prefixes;
         this.hashes = new String[partnerIds.length];
@@ -47,19 +46,12 @@ public class HashDispatcher extends AbstractReapedActor {
 
     @Override
     public AbstractActor.Receive createReceive() {
-        return receiveBuilder()
-                .match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
-                .match(Terminated.class, this::handle)
-                .matchAny(this::handleAny)
-                .build();
+        return handleDefaultMessages(receiveBuilder());
     }
 
-    private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-        ActorRef worker = this.context().actorOf(HashWorker.props().withDeploy(
-                new Deploy(new RemoteScope(message.getWorkerAddress())))
-        );
-        this.context().watch(worker);
-        this.dispatchWork(worker);
+    @Override
+    protected void initializeWorker(ActorRef worker) {
+        // nothing to do
     }
 
     private void handle(HashFoundMessage message) {
@@ -70,7 +62,8 @@ public class HashDispatcher extends AbstractReapedActor {
         // TODO check whether all hashes have been generated. If so: Inform master
     }
 
-    private void dispatchWork(ActorRef worker) {
+    @Override
+    protected void dispatchWork(ActorRef worker) {
         if (this.nextPersonToHash >= this.partnerIds.length) {
             worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
             return;
@@ -89,17 +82,9 @@ public class HashDispatcher extends AbstractReapedActor {
         this.nextPersonToHash++;
     }
 
-    private void handle(Terminated message) {
-        this.log().debug(String.format("Watched worker terminated: %s", this.sender()));
-        this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder()
-                        .workerAddress(this.sender().path().address())
-                        .build(),
-                this.self()
-        );
-
-        if (this.activeSolvers < 1) {
-            this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
-        }
+    @Override
+    protected boolean shouldTerminate() {
+        return this.activeSolvers < 1;
     }
 
 }

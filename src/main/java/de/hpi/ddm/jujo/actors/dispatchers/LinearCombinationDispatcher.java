@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 import java.math.BigInteger;
 
-public class LinearCombinationDispatcher extends AbstractReapedActor {
+public class LinearCombinationDispatcher extends AbstractWorkDispatcher {
 
 	private static final int PREFIX_CHUNK_SIZE = 1000;
 
@@ -39,7 +39,6 @@ public class LinearCombinationDispatcher extends AbstractReapedActor {
 		private static final long serialVersionUID = -3098243399816011764L;
 	}
 
-	private ActorRef master;
 	private int[] plainPasswords;
 	private int activeSolvers = 0;
 	private BigInteger upperBound;
@@ -48,7 +47,7 @@ public class LinearCombinationDispatcher extends AbstractReapedActor {
 	private boolean linearCombinationFound = false;
 
 	private LinearCombinationDispatcher(ActorRef master, int[] plainPasswords) {
-		this.master = master;
+		super(master, LinearCombinationWorker.props());
 		this.plainPasswords = plainPasswords;
 		this.initializeBounds();
 	}
@@ -80,25 +79,13 @@ public class LinearCombinationDispatcher extends AbstractReapedActor {
 
 	@Override
 	public AbstractActor.Receive createReceive() {
-		return receiveBuilder()
-				.match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
+		return handleDefaultMessages(receiveBuilder()
 				.match(LinearCombinationNotFoundMessage.class, this::handle)
-				.match(LinearCombinationFoundMessage.class, this::handle)
-				.match(Terminated.class, this::handle)
-				.matchAny(this::handleAny)
-				.build();
+				.match(LinearCombinationFoundMessage.class, this::handle));
 	}
 
-	private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-		ActorRef worker = this.context().actorOf(LinearCombinationWorker.props().withDeploy(
-				new Deploy(new RemoteScope(message.getWorkerAddress())))
-		);
-		this.context().watch(worker);
-		this.initializeWorker(worker);
-		this.dispatchWork(worker);
-	}
-
-	private void initializeWorker(ActorRef worker) {
+	@Override
+	protected void initializeWorker(ActorRef worker) {
 		worker.tell(LinearCombinationWorker.InitializeWorkerMessage.builder()
 				.plainPasswords(this.plainPasswords)
 				.build(),
@@ -112,7 +99,8 @@ public class LinearCombinationDispatcher extends AbstractReapedActor {
 		this.dispatchWork(this.sender());
 	}
 
-	private void dispatchWork(ActorRef worker) {
+	@Override
+	protected void dispatchWork(ActorRef worker) {
 		if (this.linearCombinationFound) {
 			worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
 			return;
@@ -168,16 +156,8 @@ public class LinearCombinationDispatcher extends AbstractReapedActor {
 		);
 	}
 
-	private void handle(Terminated message) {
-		this.log().debug(String.format("Watched worker terminated: %s", this.sender()));
-		this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder()
-						.workerAddress(this.sender().path().address())
-						.build(),
-				this.self()
-		);
-
-		if (this.activeSolvers < 1) {
-			this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
-		}
+	@Override
+	protected boolean shouldTerminate() {
+		return this.activeSolvers < 1;
 	}
 }

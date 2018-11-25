@@ -21,7 +21,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class GeneDispatcher extends AbstractReapedActor {
+public class GeneDispatcher extends AbstractWorkDispatcher {
 
 	private static final int MAXIMUM_GENE_LIST_SIZE = 126000; // message size in bytes
 
@@ -36,38 +36,25 @@ public class GeneDispatcher extends AbstractReapedActor {
 		private int bestPartner;
 	}
 
-	private ActorRef master;
 	private List<String> geneSequences;
 	private int[] bestGenePartners;
 	private int nextOriginalPerson = 0;
 	private int activeAnalyzers = 0;
 
 	private GeneDispatcher(ActorRef master, List<String> geneSequences) {
+		super(master, GeneWorker.props());
 		this.geneSequences = geneSequences;
-		this.master = master;
 		this.bestGenePartners = new int[geneSequences.size()];
 	}
 
 	@Override
 	public AbstractActor.Receive createReceive() {
-		return receiveBuilder()
-				.match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
-				.match(BestGenePartnerFoundMessage.class, this::handle)
-				.match(Terminated.class, this::handle)
-				.matchAny(this::handleAny)
-				.build();
+		return handleDefaultMessages(receiveBuilder()
+				.match(BestGenePartnerFoundMessage.class, this::handle));
 	}
 
-	private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-		ActorRef worker = this.getContext().actorOf(GeneWorker.props().withDeploy(
-				new Deploy(new RemoteScope(message.getWorkerAddress())))
-		);
-		this.context().watch(worker);
-		this.initializeWorker(worker);
-		this.dispatchWork(worker);
-	}
-
-	private void initializeWorker(ActorRef worker) {
+	@Override
+	protected void initializeWorker(ActorRef worker) {
 		int nextGeneSequenceIndex = 0;
 		int messageSize;
 		List<String> geneSequencesInNextMessage = new ArrayList<>();
@@ -116,7 +103,8 @@ public class GeneDispatcher extends AbstractReapedActor {
 		);
 	}
 
-	private void dispatchWork(ActorRef worker) {
+	@Override
+	protected void dispatchWork(ActorRef worker) {
 		if (!this.hasMoreWork()) {
 			this.log().debug(String.format("Sending poison pill to %s", worker));
 			worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
@@ -135,16 +123,8 @@ public class GeneDispatcher extends AbstractReapedActor {
 		return this.nextOriginalPerson < this.geneSequences.size();
 	}
 
-	private void handle(Terminated message) {
-		this.log().debug(String.format("Watched worker terminated: %s", this.sender()));
-		this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder()
-						.workerAddress(this.sender().path().address())
-						.build(),
-				this.self()
-		);
-
-		if (this.activeAnalyzers < 1) {
-			this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
-		}
+	@Override
+	protected boolean shouldTerminate() {
+		return this.activeAnalyzers < 1;
 	}
 }

@@ -22,7 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public class PasswordDispatcher extends AbstractReapedActor {
+public class PasswordDispatcher extends AbstractWorkDispatcher {
 
     private static final int LAST_PASSWORD_TO_HASH = 999999;
     private static final int WORK_CHUNK_SIZE = 10000;
@@ -57,36 +57,28 @@ public class PasswordDispatcher extends AbstractReapedActor {
     private Set<String> uncrackedTargetPasswordHashes;
     private ArrayList<CrackedPassword> crackedPasswords = new ArrayList<>();
     private List<PasswordsHashedMessage> hashesToCompare = new ArrayList<>();
-    private ActorRef master;
     private int activeHashers = 0;
     private int activeCompatators = 0;
     private int nextPasswordToHash = 0;
 
     private PasswordDispatcher(ActorRef master, List<String> targetPasswordHashes) {
+        super(master, PasswordWorker.props());
         this.uncrackedTargetPasswordHashes = new HashSet<>(targetPasswordHashes);
         for(String targetPasswordHash : targetPasswordHashes) {
             this.crackedPasswords.add(CrackedPassword.builder().hashedPassword(targetPasswordHash).build());
         }
-        this.master = master;
     }
 
     @Override
     public Receive createReceive() {
-        return receiveBuilder()
-                .match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
+        return handleDefaultMessages(receiveBuilder()
                 .match(PasswordsHashedMessage.class, this::handle)
-                .match(PasswordsCrackedMessage.class, this::handle)
-                .match(Terminated.class, this::handle)
-                .matchAny(this::handleAny)
-                .build();
+                .match(PasswordsCrackedMessage.class, this::handle));
     }
 
-    private void handle(DispatcherMessages.AddComputationNodeMessage message) {
-        ActorRef worker = this.context().actorOf(PasswordWorker.props().withDeploy(
-                new Deploy(new RemoteScope(message.getWorkerAddress())))
-        );
-        this.context().watch(worker);
-        this.dispatchWork(worker);
+    @Override
+    protected void initializeWorker(ActorRef worker) {
+        // nothing to do
     }
 
     private void handle(PasswordsHashedMessage message) {
@@ -126,7 +118,8 @@ public class PasswordDispatcher extends AbstractReapedActor {
         );
     }
 
-    private void dispatchWork(ActorRef worker) {
+    @Override
+    protected void dispatchWork(ActorRef worker) {
         if (!this.hasMoreWork()) {
             this.log().debug(String.format("Sending poison pill to %s", worker));
             worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
@@ -197,15 +190,8 @@ public class PasswordDispatcher extends AbstractReapedActor {
         this.log().debug(String.format("Dispatching hashing work. Currently utilized %d hashers", this.activeHashers));
     }
 
-    private void handle(Terminated message) {
-        this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder()
-                .workerAddress(this.sender().path().address())
-                .build(),
-            this.self()
-        );
-
-        if (this.activeHashers < 1 && this.activeCompatators < 1) {
-            this.self().tell(PoisonPill.getInstance(), ActorRef.noSender());
-        }
+    @Override
+    protected boolean shouldTerminate() {
+        return this.activeHashers < 1 && this.activeCompatators < 1;
     }
 }
