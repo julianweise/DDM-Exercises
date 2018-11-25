@@ -205,8 +205,9 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     }
 
     private void handle(Terminated message) {
-        this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder().
-                workerAddress(this.sender().path().address()),
+        this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder()
+                .workerAddress(this.sender().path().address())
+                .build(),
             this.self()
         );
 

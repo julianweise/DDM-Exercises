@@ -3,14 +3,11 @@ package de.hpi.ddm.jujo.actors;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import akka.actor.*;
 import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
-import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
-import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import de.hpi.ddm.jujo.utils.ProcessingPipeline;
 import de.siegmar.fastcsv.reader.CsvParser;
 import de.siegmar.fastcsv.reader.CsvReader;
@@ -153,6 +150,7 @@ public class Master extends AbstractLoggingActor {
     }
 
     private void handle(DispatcherMessages.ReleaseComputationNodeMessage message) {
+        this.log().info(String.format("Released worker %s available for new work", message.getWorkerAddress().toString()));
         this.pipeline.addWorker(message.getWorkerAddress());
     }
 
@@ -165,7 +163,7 @@ public class Master extends AbstractLoggingActor {
     }
 
     private void handle(LinearCombinationFoundMessage message) {
-		this.pipeline.linearCombincationFinished(message.prefixes);
+		this.pipeline.linearCombinationFinished(message.prefixes);
     }
 
     private void handle(Terminated message) {

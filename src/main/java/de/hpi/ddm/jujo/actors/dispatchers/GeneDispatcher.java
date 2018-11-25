@@ -153,8 +153,9 @@ public class GeneDispatcher extends AbstractLoggingActor {
 
 	private void handle(Terminated message) {
 		this.log().info(String.format("Watched worker terminated: %s", this.sender()));
-		this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder().
-						workerAddress(this.sender().path().address()),
+		this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder()
+						.workerAddress(this.sender().path().address())
+						.build(),
 				this.self()
 		);
 

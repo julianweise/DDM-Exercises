@@ -142,7 +142,7 @@ public class ProcessingPipeline {
     	this.finishStep(Task.GENE_ANALYSIS, bestMatchingPartners);
     }
 
-    public void linearCombincationFinished(int[] prefixes) {
+    public void linearCombinationFinished(int[] prefixes) {
     	this.finishStep(Task.LINEAR_COMBINATION, prefixes);
     }
 
@@ -214,6 +214,7 @@ public class ProcessingPipeline {
                 return false;
             }
         }
+        this.master.log().info(String.format("Step %s enabled", step.getTask()));
         return true;
     }
 
