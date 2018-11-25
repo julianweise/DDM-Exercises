@@ -22,7 +22,7 @@ public class Bootstrap {
     public static void runMaster(Main.MasterCommand masterCommand) {
 
         // Create the ActorSystem
-        final Config config = AkkaUtils.createRemoteAkkaConfig(masterCommand.getDefaultHost(), Main.MasterCommand.DEFAULT_PORT);
+        final Config config = AkkaUtils.createRemoteAkkaConfig(masterCommand.host, Main.MasterCommand.DEFAULT_PORT);
         final ActorSystem actorSystem = ActorSystem.create(DEFAULT_MASTER_SYSTEM_NAME, config);
 
         // Create the Reaper.

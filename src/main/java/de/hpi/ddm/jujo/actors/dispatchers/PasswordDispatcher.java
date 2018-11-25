@@ -138,7 +138,8 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
         this.dispatchHasherWork(worker);
     }
 
-    private boolean hasMoreWork() {
+	@Override
+	protected boolean hasMoreWork() {
         return !this.allPasswordsCracked() && (this.moreHashesToCompare() || this.morePasswordsToHash());
     }
 
@@ -182,10 +183,5 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
         this.nextPasswordToHash += WORK_CHUNK_SIZE;
         this.activeHashers++;
         this.log().debug(String.format("Dispatching hashing work. Currently utilized %d hashers", this.activeHashers));
-    }
-
-    @Override
-    protected boolean shouldTerminate() {
-        return this.activeHashers < 1 && this.activeCompatators < 1;
     }
 }

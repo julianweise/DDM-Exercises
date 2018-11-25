@@ -116,12 +116,8 @@ public class GeneDispatcher extends AbstractWorkDispatcher {
 		this.activeAnalyzers += 1;
 	}
 
-	private boolean hasMoreWork() {
-		return this.nextOriginalPerson < this.geneSequences.size();
-	}
-
 	@Override
-	protected boolean shouldTerminate() {
-		return this.activeAnalyzers < 1;
+	protected boolean hasMoreWork() {
+		return this.nextOriginalPerson < this.geneSequences.size();
 	}
 }

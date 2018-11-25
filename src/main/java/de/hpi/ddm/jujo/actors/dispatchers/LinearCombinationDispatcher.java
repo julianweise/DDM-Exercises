@@ -146,7 +146,7 @@ public class LinearCombinationDispatcher extends AbstractWorkDispatcher {
 	}
 
 	@Override
-	protected boolean shouldTerminate() {
-		return this.activeSolvers < 1;
+	protected boolean hasMoreWork() {
+		return !this.linearCombinationFound;
 	}
 }

@@ -71,6 +71,9 @@ public class Main {
 
         @Parameter(names = {"-i", "--input"}, description = "input file endPassword process")
         String pathToInputFile;
+
+        @Parameter(names = {"-h", "--host"}, description = "host address of this system")
+        String host = getDefaultHost();
     }
 
     @Parameters(commandDescription = "start a slave actor system")

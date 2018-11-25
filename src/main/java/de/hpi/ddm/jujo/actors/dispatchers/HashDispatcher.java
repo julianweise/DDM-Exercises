@@ -93,8 +93,7 @@ public class HashDispatcher extends AbstractWorkDispatcher {
     }
 
     @Override
-    protected boolean shouldTerminate() {
-        return this.activeSolvers < 1;
+    protected boolean hasMoreWork() {
+        return this.numberOfUnhashedPartners > 0;
     }
-
 }
