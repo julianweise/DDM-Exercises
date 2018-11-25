@@ -72,6 +72,7 @@ public class LinearCombinationWorker extends AbstractLoggingActor {
 				return;
 			}
 		}
+		this.notFoundLinearCombination();
 	}
 
 	private int sum(BigInteger prefixes) {
@@ -87,5 +88,9 @@ public class LinearCombinationWorker extends AbstractLoggingActor {
                 .prefixes(prefixes)
                 .build(),
             this.self());
+    }
+
+    private void notFoundLinearCombination() {
+	    this.sender().tell(LinearCombinationDispatcher.LinearCombinationNotFoundMessage.builder().build(), this.self());
     }
 }

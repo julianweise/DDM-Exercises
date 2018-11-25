@@ -125,6 +125,7 @@ public class LinearCombinationDispatcher extends AbstractLoggingActor {
 	}
 
 	private void handle(LinearCombinationNotFoundMessage message) {
+	    this.log().info("Linear combination not found");
 		this.activeSolvers--;
 		this.dispatchWork(this.sender());
 	}
@@ -158,7 +159,7 @@ public class LinearCombinationDispatcher extends AbstractLoggingActor {
 
 	private void handle(LinearCombinationFoundMessage message) {
 		this.activeSolvers--;
-
+        this.log().info("Success! Linear combination found");
 		if (!this.linearCombinationFound) {
 			this.submitLinearCombination(message.getPrefixes());
 		}

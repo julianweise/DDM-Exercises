@@ -214,7 +214,6 @@ public class ProcessingPipeline {
                 return false;
             }
         }
-        this.master.log().info(String.format("Step %s enabled", step.getTask()));
         return true;
     }
 
