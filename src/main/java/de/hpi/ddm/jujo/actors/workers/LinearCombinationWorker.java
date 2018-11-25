@@ -3,9 +3,8 @@ package de.hpi.ddm.jujo.actors.workers;
 import akka.actor.AbstractActor;
 import akka.actor.AbstractLoggingActor;
 import akka.actor.Props;
-import com.sun.tracing.ProviderName;
 import de.hpi.ddm.jujo.actors.Reaper;
-import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
+import de.hpi.ddm.jujo.actors.dispatchers.LinearCombinationDispatcher;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,12 +12,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+
 
 public class LinearCombinationWorker extends AbstractLoggingActor {
 
@@ -74,6 +68,7 @@ public class LinearCombinationWorker extends AbstractLoggingActor {
 		for (int i = 0; i < message.prefixesToTest; ++i) {
 			BigInteger prefixes = message.startPrefixes.add(BigInteger.valueOf(i));
 			if (this.sum(prefixes) == 0) {
+			    this.foundLinearCombination(prefixes);
 				return;
 			}
 		}
@@ -82,8 +77,15 @@ public class LinearCombinationWorker extends AbstractLoggingActor {
 	private int sum(BigInteger prefixes) {
 		int sum = 0;
 		for (int i = 0; i < this.plainPasswords.length; ++i) {
-			sum += this.plainPasswords[i] * (prefixes.testBit(i) ? 1 : -1);
+            sum += this.plainPasswords[i] * (prefixes.testBit(i) ? 1 : -1);
 		}
 		return sum;
 	}
+
+	private void foundLinearCombination(BigInteger prefixes) {
+	    this.sender().tell(LinearCombinationDispatcher.LinearCombinationFoundMessage.builder()
+                .prefixes(prefixes)
+                .build(),
+            this.self());
+    }
 }
