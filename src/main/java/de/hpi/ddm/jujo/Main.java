@@ -1,12 +1,12 @@
 package de.hpi.ddm.jujo;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.Parameters;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 public class Main {
 

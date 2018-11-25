@@ -3,6 +3,7 @@ package de.hpi.ddm.jujo.actors.workers;
 import akka.actor.AbstractActor;
 import akka.actor.AbstractLoggingActor;
 import akka.actor.Props;
+import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import lombok.AllArgsConstructor;
@@ -18,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class PasswordWorker extends AbstractLoggingActor {
+public class PasswordWorker extends AbstractReapedActor {
 
     public static Props props() {
         return Props.create(PasswordWorker.class);
@@ -41,32 +42,16 @@ public class PasswordWorker extends AbstractLoggingActor {
     }
 
     @Override
-    public void preStart() throws Exception {
-        super.preStart();
-
-        // Register at this actor system's reaper
-        Reaper.watchWithDefaultReaper(this);
-    }
-
-    @Override
-    public void postStop() throws Exception {
-        super.postStop();
-
-        // Log the stop event
-        this.log().info("Stopped {}.", this.getSelf());
-    }
-
-    @Override
     public AbstractActor.Receive createReceive() {
         return receiveBuilder()
                 .match(HashPasswordsMessage.class, this::handle)
                 .match(ComparePasswordsMessage.class, this::handle)
-                .matchAny(object -> this.log().info("Received unknown message: \"{}\"", object.toString()))
+		        .matchAny(this::handleAny)
                 .build();
     }
 
     private void handle(HashPasswordsMessage message) {
-        this.log().info(String.format("Hashing passwords from %d to %d", message.startPassword, message.endPassword));
+        this.log().debug(String.format("Hashing passwords from %d to %d", message.startPassword, message.endPassword));
         String[] hashes = new String[message.endPassword - message.startPassword + 1];
         for (int i = message.startPassword; i <= message.endPassword; ++i) {
             hashes[i - message.startPassword] = this.hash(i);
@@ -74,6 +59,7 @@ public class PasswordWorker extends AbstractLoggingActor {
         this.sendHashes(hashes, message.startPassword, message.endPassword);
     }
 
+    @SuppressWarnings("Duplicates")
     private String hash(int number) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -102,7 +88,7 @@ public class PasswordWorker extends AbstractLoggingActor {
     }
 
     private void handle(ComparePasswordsMessage message) {
-        this.log().info(String.format("Comparing %d password hashes against %d target hashes", message.generatedPasswordHashes.length, message.targetPasswordHashes.size()));
+        this.log().debug(String.format("Comparing %d password hashes against %d target hashes", message.generatedPasswordHashes.length, message.targetPasswordHashes.size()));
         ArrayList<PasswordDispatcher.CrackedPassword> crackedPasswords = new ArrayList<>();
         for (int i = 0; i < message.generatedPasswordHashes.length; ++i) {
             for (String targetPasswordHash : message.targetPasswordHashes) {

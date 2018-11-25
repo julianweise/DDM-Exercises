@@ -1,7 +1,13 @@
 package de.hpi.ddm.jujo.actors.dispatchers;
 
-import akka.actor.*;
+import akka.actor.AbstractLoggingActor;
+import akka.actor.ActorRef;
+import akka.actor.Deploy;
+import akka.actor.PoisonPill;
+import akka.actor.Props;
+import akka.actor.Terminated;
 import akka.remote.RemoteScope;
+import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.workers.PasswordWorker;
@@ -11,9 +17,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
-public class PasswordDispatcher extends AbstractLoggingActor {
+public class PasswordDispatcher extends AbstractReapedActor {
 
     private static final int LAST_PASSWORD_TO_HASH = 999999;
     private static final int WORK_CHUNK_SIZE = 10000;
@@ -45,22 +54,6 @@ public class PasswordDispatcher extends AbstractLoggingActor {
         private String hashedPassword;
     }
 
-    @Override
-    public void preStart() throws Exception {
-        super.preStart();
-
-        // Register at this actor system's reaper
-        Reaper.watchWithDefaultReaper(this);
-    }
-
-    @Override
-    public void postStop() throws Exception {
-        super.postStop();
-
-        // Log the stop event
-        this.log().info("Stopped {}.", this.getSelf());
-    }
-
     private Set<String> uncrackedTargetPasswordHashes;
     private ArrayList<CrackedPassword> crackedPasswords = new ArrayList<>();
     private List<PasswordsHashedMessage> hashesToCompare = new ArrayList<>();
@@ -84,7 +77,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
                 .match(PasswordsHashedMessage.class, this::handle)
                 .match(PasswordsCrackedMessage.class, this::handle)
                 .match(Terminated.class, this::handle)
-                .matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
+                .matchAny(this::handleAny)
                 .build();
     }
 
@@ -125,7 +118,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     }
 
     private void submitCrackedPasswords() {
-        this.log().info("Submitting cracked passwords to master.");
+        this.log().debug("Submitting cracked passwords to master.");
         this.master.tell(Master.PasswordsCrackedMessage.builder()
                 .plainPasswords(this.crackedPasswords.stream().map(CrackedPassword::getPlainPassword).mapToInt(x -> x).toArray())
                 .build(),
@@ -135,12 +128,12 @@ public class PasswordDispatcher extends AbstractLoggingActor {
 
     private void dispatchWork(ActorRef worker) {
         if (!this.hasMoreWork()) {
-            this.log().info(String.format("Sending poison pill to %s", worker));
+            this.log().debug(String.format("Sending poison pill to %s", worker));
             worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
             return;
         }
 
-        this.log().info(String.format("Worker requested work. %d active hashers, %d active comparators", this.activeHashers, this.activeCompatators));
+        this.log().debug(String.format("Worker requested work. %d active hashers, %d active comparators", this.activeHashers, this.activeCompatators));
 
         if (this.activeCompatators < 1 && this.moreHashesToCompare()) {
             this.dispatchComparatorWork(worker);
@@ -175,7 +168,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
     }
 
     private void dispatchComparatorWork(ActorRef comparator) {
-        this.log().info("Dispatching comparator work");
+        this.log().debug("Dispatching comparator work");
 
         PasswordsHashedMessage workItem = this.hashesToCompare.remove(0);
         comparator.tell(PasswordWorker.ComparePasswordsMessage.builder()
@@ -187,11 +180,11 @@ public class PasswordDispatcher extends AbstractLoggingActor {
             this.self()
         );
         this.activeCompatators++;
-        this.log().info(String.format("Dispatching comparison work. Currently utilized %d comparators", this.activeCompatators));
+        this.log().debug(String.format("Dispatching comparison work. Currently utilized %d comparators", this.activeCompatators));
     }
 
     private void dispatchHasherWork(ActorRef hasher) {
-        this.log().info("Dispatching hashing work");
+        this.log().debug("Dispatching hashing work");
 
         hasher.tell(PasswordWorker.HashPasswordsMessage.builder()
                 .startPassword(this.nextPasswordToHash)
@@ -201,7 +194,7 @@ public class PasswordDispatcher extends AbstractLoggingActor {
         );
         this.nextPasswordToHash += WORK_CHUNK_SIZE;
         this.activeHashers++;
-        this.log().info(String.format("Dispatching hashing work. Currently utilized %d hashers", this.activeHashers));
+        this.log().debug(String.format("Dispatching hashing work. Currently utilized %d hashers", this.activeHashers));
     }
 
     private void handle(Terminated message) {

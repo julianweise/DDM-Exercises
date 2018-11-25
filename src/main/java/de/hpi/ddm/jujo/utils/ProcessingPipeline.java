@@ -12,7 +12,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -188,6 +187,7 @@ public class ProcessingPipeline {
     	if (step.getTaskState() == TaskState.INITIALIZED) {
     		step.setStartTimestamp(System.currentTimeMillis());
     		step.setTaskState(TaskState.RUNNING);
+    		this.master.log().info(String.format("%s started", step.getTask()));
 	    }
 
         step.increaseNumberOfAssignedWorkers();

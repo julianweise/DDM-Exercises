@@ -1,12 +1,9 @@
 package de.hpi.ddm.jujo;
 
-import java.util.concurrent.TimeoutException;
-
-import com.typesafe.config.Config;
-
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Address;
+import com.typesafe.config.Config;
 import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.Shepherd;
@@ -14,6 +11,8 @@ import de.hpi.ddm.jujo.actors.Slave;
 import de.hpi.ddm.jujo.utils.AkkaUtils;
 import scala.concurrent.Await;
 import scala.concurrent.duration.Duration;
+
+import java.util.concurrent.TimeoutException;
 
 public class Bootstrap {
 

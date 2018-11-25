@@ -3,6 +3,7 @@ package de.hpi.ddm.jujo.actors.workers;
 import akka.actor.AbstractActor;
 import akka.actor.AbstractLoggingActor;
 import akka.actor.Props;
+import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.dispatchers.LinearCombinationDispatcher;
 import lombok.AllArgsConstructor;
@@ -14,7 +15,7 @@ import java.io.Serializable;
 import java.math.BigInteger;
 
 
-public class LinearCombinationWorker extends AbstractLoggingActor {
+public class LinearCombinationWorker extends AbstractReapedActor {
 
 	public static Props props() {
 		return Props.create(LinearCombinationWorker.class);
@@ -34,27 +35,11 @@ public class LinearCombinationWorker extends AbstractLoggingActor {
 	}
 
 	@Override
-	public void preStart() throws Exception {
-		super.preStart();
-
-		// Register at this actor system's reaper
-		Reaper.watchWithDefaultReaper(this);
-	}
-
-	@Override
-	public void postStop() throws Exception {
-		super.postStop();
-
-		// Log the stop event
-		this.log().info("Stopped {}.", this.getSelf());
-	}
-
-	@Override
 	public AbstractActor.Receive createReceive() {
 		return receiveBuilder()
 				.match(InitializeWorkerMessage.class, this::handle)
 				.match(FindLinearCombinationMessage.class, this::handle)
-				.matchAny(object -> this.log().info("Received unknown message: \"{}\"", object.toString()))
+				.matchAny(this::handleAny)
 				.build();
 	}
 

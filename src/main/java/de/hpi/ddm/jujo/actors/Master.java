@@ -1,12 +1,11 @@
 package de.hpi.ddm.jujo.actors;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-
-import akka.actor.*;
+import akka.actor.AbstractLoggingActor;
+import akka.actor.ActorRef;
+import akka.actor.Address;
+import akka.actor.PoisonPill;
+import akka.actor.Props;
+import akka.actor.Terminated;
 import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
 import de.hpi.ddm.jujo.utils.ProcessingPipeline;
 import de.siegmar.fastcsv.reader.CsvParser;
@@ -17,7 +16,16 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-public class Master extends AbstractLoggingActor {
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class Master extends AbstractReapedActor {
 
     public static final String DEFAULT_NAME = "master";
     public static final String INPUT_DATA_PASSWORD_COLUMN = "Password";
@@ -63,18 +71,6 @@ public class Master extends AbstractLoggingActor {
 	    private int[] prefixes;
     }
 
-    @Override
-    public void preStart() throws Exception {
-        super.preStart();
-        Reaper.watchWithDefaultReaper(this);
-    }
-
-    @Override
-    public void postStop() throws Exception {
-        super.postStop();
-        this.log().info("Stopped {}.", this.getSelf());
-    }
-
     private int currentNumberOfSlaves = 0;
     private int minNumberOfSlavesToStartWork;
     private Map<String, List<String>> inputData = new HashMap<>();
@@ -112,7 +108,7 @@ public class Master extends AbstractLoggingActor {
             CsvRow row = csvParser.nextRow();
             for (String column : csvParser.getHeader()) {
                 this.inputData.put(column, new ArrayList<>());
-                this.log().info(String.format("Input file column detected %s", column));
+                this.log().debug(String.format("Input file column detected %s", column));
             }
             do {
                 for (String column : this.inputData.keySet()) {
@@ -132,7 +128,7 @@ public class Master extends AbstractLoggingActor {
 		        .match(LinearCombinationFoundMessage.class, this::handle)
                 .match(DispatcherMessages.ReleaseComputationNodeMessage.class, this::handle)
                 .match(Terminated.class, this::handle)
-                .matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
+                .matchAny(this::handleAny)
                 .build();
     }
 
@@ -150,7 +146,7 @@ public class Master extends AbstractLoggingActor {
     }
 
     private void handle(DispatcherMessages.ReleaseComputationNodeMessage message) {
-        this.log().info(String.format("Released worker %s available for new work", message.getWorkerAddress().toString()));
+        this.log().debug(String.format("Released worker %s available for new work", message.getWorkerAddress().toString()));
         this.pipeline.addWorker(message.getWorkerAddress());
     }
 

@@ -8,22 +8,17 @@ import akka.actor.PoisonPill;
 import akka.actor.Props;
 import akka.actor.Terminated;
 import akka.remote.RemoteScope;
-import de.hpi.ddm.jujo.actors.Master;
+import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.Reaper;
-import de.hpi.ddm.jujo.actors.workers.GeneWorker;
 import de.hpi.ddm.jujo.actors.workers.HashWorker;
-import de.hpi.ddm.jujo.actors.workers.LinearCombinationWorker;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.List;
 
-public class HashDispatcher extends AbstractLoggingActor {
+public class HashDispatcher extends AbstractReapedActor {
 
     public static Props props(ActorRef master, int[] partnerIds, int prefixes[]) {
         return Props.create(HashDispatcher.class, () -> new HashDispatcher(master, partnerIds, prefixes));
@@ -34,22 +29,6 @@ public class HashDispatcher extends AbstractLoggingActor {
         private static final long serialVersionUID = -6506901694425938486L;
         private int originalPerson;
         private String hash;
-    }
-
-    @Override
-    public void preStart() throws Exception {
-        super.preStart();
-
-        // Register at this actor system's reaper
-        Reaper.watchWithDefaultReaper(this);
-    }
-
-    @Override
-    public void postStop() throws Exception {
-        super.postStop();
-
-        // Log the stop event
-        this.log().info("Stopped {}.", this.getSelf());
     }
 
     private ActorRef master;
@@ -71,7 +50,7 @@ public class HashDispatcher extends AbstractLoggingActor {
         return receiveBuilder()
                 .match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
                 .match(Terminated.class, this::handle)
-                .matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
+                .matchAny(this::handleAny)
                 .build();
     }
 
@@ -84,7 +63,7 @@ public class HashDispatcher extends AbstractLoggingActor {
     }
 
     private void handle(HashFoundMessage message) {
-        --this.activeSolvers;
+        this.activeSolvers--;
         this.hashes[message.originalPerson] = message.hash;
         this.dispatchWork(this.sender());
 
@@ -107,11 +86,11 @@ public class HashDispatcher extends AbstractLoggingActor {
                 .build(),
             this.self()
         );
-        ++this.nextPersonToHash;
+        this.nextPersonToHash++;
     }
 
     private void handle(Terminated message) {
-        this.log().info(String.format("Watched worker terminated: %s", this.sender()));
+        this.log().debug(String.format("Watched worker terminated: %s", this.sender()));
         this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder()
                         .workerAddress(this.sender().path().address())
                         .build(),

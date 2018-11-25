@@ -3,12 +3,12 @@ package de.hpi.ddm.jujo.actors.dispatchers;
 import akka.actor.AbstractActor;
 import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
-import akka.actor.Address;
 import akka.actor.Deploy;
 import akka.actor.PoisonPill;
 import akka.actor.Props;
 import akka.actor.Terminated;
 import akka.remote.RemoteScope;
+import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.Reaper;
 import de.hpi.ddm.jujo.actors.workers.GeneWorker;
@@ -21,7 +21,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class GeneDispatcher extends AbstractLoggingActor {
+public class GeneDispatcher extends AbstractReapedActor {
 
 	private static final int MAXIMUM_GENE_LIST_SIZE = 126000; // message size in bytes
 
@@ -34,22 +34,6 @@ public class GeneDispatcher extends AbstractLoggingActor {
 		private static final long serialVersionUID = 2715984585289946783L;
 		private int originalPerson;
 		private int bestPartner;
-	}
-
-	@Override
-	public void preStart() throws Exception {
-		super.preStart();
-
-		// Register at this actor system's reaper
-		Reaper.watchWithDefaultReaper(this);
-	}
-
-	@Override
-	public void postStop() throws Exception {
-		super.postStop();
-
-		// Log the stop event
-		this.log().info("Stopped {}.", this.getSelf());
 	}
 
 	private ActorRef master;
@@ -70,7 +54,7 @@ public class GeneDispatcher extends AbstractLoggingActor {
 				.match(DispatcherMessages.AddComputationNodeMessage.class, this::handle)
 				.match(BestGenePartnerFoundMessage.class, this::handle)
 				.match(Terminated.class, this::handle)
-				.matchAny(object -> this.log().info(this.getClass().getName() + " received unknown message: " + object.toString()))
+				.matchAny(this::handleAny)
 				.build();
 	}
 
@@ -134,7 +118,7 @@ public class GeneDispatcher extends AbstractLoggingActor {
 
 	private void dispatchWork(ActorRef worker) {
 		if (!this.hasMoreWork()) {
-			this.log().info(String.format("Sending poison pill to %s", worker));
+			this.log().debug(String.format("Sending poison pill to %s", worker));
 			worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
 			return;
 		}
@@ -152,7 +136,7 @@ public class GeneDispatcher extends AbstractLoggingActor {
 	}
 
 	private void handle(Terminated message) {
-		this.log().info(String.format("Watched worker terminated: %s", this.sender()));
+		this.log().debug(String.format("Watched worker terminated: %s", this.sender()));
 		this.master.tell(DispatcherMessages.ReleaseComputationNodeMessage.builder()
 						.workerAddress(this.sender().path().address())
 						.build(),
