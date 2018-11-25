@@ -43,7 +43,8 @@ public class HashWorker extends AbstractReapedActor {
                 .hash(hash)
                 .originalPerson(message.originalPerson)
                 .build(),
-            this.sender());
+            this.self()
+        );
     }
 
     private String findHash(int content, String fullPrefix) {

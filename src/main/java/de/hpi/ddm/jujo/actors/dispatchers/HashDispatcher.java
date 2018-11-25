@@ -90,7 +90,6 @@ public class HashDispatcher extends AbstractWorkDispatcher {
             this.self()
         );
         this.nextPersonToHash++;
-        this.numberOfUnhashedPartners--;
     }
 
     @Override
