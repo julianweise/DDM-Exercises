@@ -36,7 +36,7 @@ public class Master extends AbstractReapedActor {
 
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static class SlaveNodeRegistrationMessage implements Serializable {
+    static class SlaveNodeRegistrationMessage implements Serializable {
 
         private static final long serialVersionUID = -1682543505601299772L;
         private Address slaveAddress;
@@ -44,7 +44,7 @@ public class Master extends AbstractReapedActor {
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static class SlaveNodeTerminatedMessage implements Serializable {
+    static class SlaveNodeTerminatedMessage implements Serializable {
 
         private static final long serialVersionUID = -3053321777422537935L;
         private Address slaveAddress;
@@ -81,7 +81,7 @@ public class Master extends AbstractReapedActor {
     private Map<String, List<String>> inputData = new HashMap<>();
     private ProcessingPipeline pipeline;
 
-    public Master(int numLocalWorkers, int minNumberOfSlavesToStartWork, String pathToInputFile) {
+    private Master(int numLocalWorkers, int minNumberOfSlavesToStartWork, String pathToInputFile) {
         try {
             this.parseInputFile(pathToInputFile);
         } catch (IOException e) {

@@ -30,12 +30,12 @@ public class ProcessingPipeline {
         @Builder.Default private int numberOfAssignedWorkers = 0;
         @Builder.Default private int maxNumberOfWorkers = Integer.MAX_VALUE;
 
-        public PipelineStep setRequiredStepsConvenience(Task... requiredSteps) {
+        PipelineStep setRequiredStepsConvenience(Task... requiredSteps) {
             this.requiredSteps = requiredSteps;
             return this;
         }
 
-        public void increaseNumberOfAssignedWorkers() {
+        void increaseNumberOfAssignedWorkers() {
             this.numberOfAssignedWorkers += 1;
         }
     }
