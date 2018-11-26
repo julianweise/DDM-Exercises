@@ -5,7 +5,6 @@ import akka.actor.Address;
 import de.hpi.ddm.jujo.actors.Master;
 import de.hpi.ddm.jujo.actors.dispatchers.DispatcherMessages;
 import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
-import de.hpi.ddm.jujo.actors.dispatchers.HashDispatcher;
 import de.hpi.ddm.jujo.actors.dispatchers.LinearCombinationDispatcher;
 import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
 import lombok.AllArgsConstructor;
@@ -48,11 +47,9 @@ public class ProcessingPipeline {
     }
 
     private enum Task {
-        NONE,
         PASSWORD_CRACKING,
         GENE_ANALYSIS,
         LINEAR_COMBINATION,
-        HASH_MINING
     }
 
     private enum TaskState {
@@ -69,6 +66,8 @@ public class ProcessingPipeline {
     private boolean enabled = false;
     private long startTimestamp;
     private long endTimestamp;
+    private int inputForHashesWithPrefix0 = 0;
+    private int inputForHashesWithPrefix1 = 0;
 
     public ProcessingPipeline(Master master) {
         this.master = master;
@@ -100,7 +99,6 @@ public class ProcessingPipeline {
         return PipelineStep.builder()
                 .task(Task.GENE_ANALYSIS)
                 .taskDispatcher(geneDispatcher)
-                .nextStep(Task.HASH_MINING)
                 .maxNumberOfWorkers(geneSequences.size())
                 .build();
     }
@@ -112,22 +110,9 @@ public class ProcessingPipeline {
     	return PipelineStep.builder()
 			    .task(Task.LINEAR_COMBINATION)
 			    .taskDispatcher(linearCombinationDispatcher)
-			    .nextStep(Task.HASH_MINING)
 			    .maxNumberOfWorkers(4)
 			    .build()
 			    .setRequiredStepsConvenience(Task.PASSWORD_CRACKING);
-    }
-
-    private PipelineStep initializedHashMiningStep(int[] partnerIds, int[] prefixes) {
-        ActorRef hashDispatcher = this.master.context().actorOf(
-                HashDispatcher.props(this.master.self(), partnerIds, prefixes));
-        this.master.context().watch(hashDispatcher);
-        return PipelineStep.builder()
-                .task(Task.HASH_MINING)
-                .taskDispatcher(hashDispatcher)
-                .nextStep(Task.NONE)
-                .build()
-                .setRequiredStepsConvenience(Task.GENE_ANALYSIS, Task.LINEAR_COMBINATION);
     }
 
     public void start() {
@@ -172,40 +157,16 @@ public class ProcessingPipeline {
 
     public void geneAnalysisFinished(int[] bestMatchingPartners) {
     	this.finishStep(Task.GENE_ANALYSIS, bestMatchingPartners);
-
-	    this.tryInitializeHashMiningStep();
     }
 
     public void linearCombinationFinished(int[] prefixes) {
         this.finishStep(Task.LINEAR_COMBINATION, prefixes);
-
-        this.tryInitializeHashMiningStep();
     }
 
-    private void tryInitializeHashMiningStep() {
-    	PipelineStep geneAnalysis = this.pipelineSteps.get(Task.GENE_ANALYSIS);
-    	PipelineStep linearCombination = this.pipelineSteps.get(Task.LINEAR_COMBINATION);
-
-    	if (geneAnalysis == null || geneAnalysis.getTaskState() != TaskState.TERMINATED) {
-    		return;
-	    }
-	    if (linearCombination == null || linearCombination.getTaskState() != TaskState.TERMINATED) {
-	    	return;
-	    }
-
-	    this.pipelineSteps.put(Task.HASH_MINING, this.initializedHashMiningStep(
-			    geneAnalysis.getResults(),
-			    linearCombination.getResults())
-	    );
-	    this.assignAvailableWorkers();
-    }
-
-    public void hashMiningFinished(String[] hashes, int[] hashNonces) {
-        this.finishStep(Task.HASH_MINING, hashNonces);
-
-        this.endTimestamp = System.currentTimeMillis();
-
-        this.printFinalResults(hashes);
+    public void hashMiningFinished(int inputForHashesWithPrefix0, int inputForHashesWithPrefix1) {
+    	this.inputForHashesWithPrefix0 = inputForHashesWithPrefix0;
+    	this.inputForHashesWithPrefix1 = inputForHashesWithPrefix1;
+        this.tryFinishPipeline();
     }
 
 	private void finishStep(Task stepTask, int[] results) {
@@ -215,19 +176,55 @@ public class ProcessingPipeline {
 		step.setEndTimestamp(System.currentTimeMillis());
 
 		this.master.log().info(String.format("%s finished after %d ms", step.getTask(), step.getEndTimestamp() - step.getStartTimestamp()));
+		this.tryFinishPipeline();
+    }
+
+	private void tryFinishPipeline() {
+    	if (this.pipelineSteps.size() < Task.values().length) {
+    		return;
+	    }
+
+		for (PipelineStep pipelineStep : this.pipelineSteps.values()) {
+			if (pipelineStep.getTaskState() != TaskState.TERMINATED) {
+				return;
+			}
+		}
+
+		this.printFinalResults();
 	}
 
-    private void printFinalResults(String[] finalHashes) {
+    private void printFinalResults() {
+	    this.endTimestamp = System.currentTimeMillis();
     	List<String> names = this.master.getInputDataForColumn(Master.INPUT_DATA_NAME_COLUMN);
     	int[] passwords = this.pipelineSteps.get(Task.PASSWORD_CRACKING).getResults();
     	int[] linearPrefixes = this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults();
     	int[] matchingGenePartners = this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults();
-    	int[] hashNonces = this.pipelineSteps.get(Task.HASH_MINING).getResults();
+    	int[] hashNonces = new int[passwords.length];
+    	String[] hashes = new String[passwords.length];
+
+	    String hash0;
+	    String hash1;
+    	try {
+		    hash0 = AkkaUtils.SHA256(this.inputForHashesWithPrefix0);
+		    hash1 = AkkaUtils.SHA256(this.inputForHashesWithPrefix1);
+	    } catch (Exception exception) {
+    		this.master.log().error(exception, "Can not calculate finale results");
+    		return;
+	    }
+
+    	for (int i = 0; i < passwords.length; ++i) {
+    		hashNonces[i] = linearPrefixes[i] == 1
+				    ? this.inputForHashesWithPrefix1 - matchingGenePartners[i]
+				    : this.inputForHashesWithPrefix0 - matchingGenePartners[i];
+    		hashes[i] = linearPrefixes[i] == 1
+				    ? hash1
+				    : hash0;
+	    }
 
         System.out.println("\n\n\n");
         System.out.println(" ========================== [FINAL RESULTS] ==========================");
         this.printFinalResultsTableHeader();
-        for(int i = 0; i < finalHashes.length; i++) {
+        for(int i = 0; i < hashes.length; i++) {
             this.printFinalResultsRow(
             		i,
 		            names.get(i),
@@ -235,7 +232,7 @@ public class ProcessingPipeline {
 		            linearPrefixes[i],
 		            names.get(matchingGenePartners[i]),
 		            hashNonces[i],
-		            finalHashes[i]
+		            hashes[i]
             );
         }
         System.out.println(" ========================== [FINAL RESULTS] ==========================");

@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import sun.misc.Request;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -22,13 +23,15 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
     private static final int WORK_CHUNK_SIZE = 10000;
     private static final float COMPARATOR_UNDERFLOW_RATIO = 1.5f;
 
+    private static final String HASH_PREFIX0 = "00000";
+    private static final String HASH_PREFIX1 = "11111";
+
     public static Props props(ActorRef master, final List<String> targetPasswordHashes) {
         return Props.create(PasswordDispatcher.class, () -> new PasswordDispatcher(master, targetPasswordHashes));
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class PasswordsHashedMessage implements Serializable {
-
         private static final long serialVersionUID = 4933006742453684724L;
         private String[] generatedPasswordHashes;
         private int startPassword;
@@ -36,8 +39,19 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static class PasswordsCrackedMessage implements Serializable {
+    public static class HashFoundMessage implements Serializable {
+        private static final long serialVersionUID = 3465907159184917527L;
+        private int hashInput;
+        private String hash;
+    }
 
+    @Data @Builder @NoArgsConstructor
+    public static class RequestWorkMessage implements Serializable {
+        private static final long serialVersionUID = 8044248503397726954L;
+    }
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class PasswordsCrackedMessage implements Serializable {
         private static final long serialVersionUID = -5853384945199531340L;
         private CrackedPassword[] crackedPasswords;
     }
@@ -55,9 +69,16 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
     private int activeCompatators = 0;
     private int nextPasswordToHash = 0;
 
+	private int inputForHashesWithPrefix0 = 0;
+	private int inputForHashesWithPrefix1 = 0;
+	private boolean hashesSubmitted = false;
+	private List<String> hashPrefixesToFind = new ArrayList<>();
+
     private PasswordDispatcher(ActorRef master, List<String> targetPasswordHashes) {
         super(master, PasswordWorker.props());
         this.uncrackedTargetPasswordHashes = new HashSet<>(targetPasswordHashes);
+	    this.hashPrefixesToFind.add(HASH_PREFIX1);
+	    this.hashPrefixesToFind.add(HASH_PREFIX0);
         for(String targetPasswordHash : targetPasswordHashes) {
             this.crackedPasswords.add(CrackedPassword.builder().hashedPassword(targetPasswordHash).build());
         }
@@ -67,7 +88,9 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
     public Receive createReceive() {
         return handleDefaultMessages(receiveBuilder()
                 .match(PasswordsHashedMessage.class, this::handle)
-                .match(PasswordsCrackedMessage.class, this::handle));
+                .match(PasswordsCrackedMessage.class, this::handle)
+                .match(HashFoundMessage.class, this::handle)
+                .match(RequestWorkMessage.class, this::handle));
     }
 
     @Override
@@ -88,6 +111,36 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
         this.activeCompatators--;
         this.dispatchWork(this.sender());
     }
+
+    private void handle(RequestWorkMessage message) {
+    	this.dispatchWork(this.sender());
+    }
+
+    private void handle(HashFoundMessage message) {
+	    if (message.getHash().startsWith(HASH_PREFIX1)) {
+		    this.inputForHashesWithPrefix1 = message.getHashInput();
+	    } else {
+		    this.inputForHashesWithPrefix0 = message.getHashInput();
+	    }
+
+	    this.hashPrefixesToFind.remove(message.getHash().substring(0, 5));
+	    this.dispatchWork(this.sender());
+
+	    if (!this.hashesSubmitted && this.inputForHashesWithPrefix0 > 0 && this.inputForHashesWithPrefix1 > 0) {
+		    this.hashesSubmitted = true;
+		    this.submitHashes();
+	    }
+    }
+
+	private void submitHashes() {
+		this.log().debug("Submitting generated partner hashes to master.");
+		this.master.tell(Master.HashFoundMessage.builder()
+						.inputForHashWithPrefix0(this.inputForHashesWithPrefix0)
+						.inputForHashWithPrefix1(this.inputForHashesWithPrefix1)
+						.build(),
+				this.self()
+		);
+	}
 
     private void saveCrackedPassword(CrackedPassword crackedPassword) {
         for(CrackedPassword storedCrackedPassword : this.crackedPasswords) {
@@ -126,9 +179,13 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
             this.dispatchComparatorWork(worker);
             return;
         }
-        if (!this.morePasswordsToHash()) {
+        if (!this.morePasswordsToHash() && this.bothHashInputsFound()) {
             this.dispatchComparatorWork(worker);
             return;
+        }
+        if (!this.moreHashesToCompare()) {
+        	this.dispatchHasherWork(worker);
+        	return;
         }
         if (this.hashesToCompare.size() > this.activeHashers * COMPARATOR_UNDERFLOW_RATIO) {
             this.dispatchComparatorWork(worker);
@@ -140,6 +197,10 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
 
 	@Override
 	protected boolean hasMoreWork() {
+    	if (!this.bothHashInputsFound()) {
+    		return true;
+	    }
+
         return !this.allPasswordsCracked() && (this.moreHashesToCompare() || this.morePasswordsToHash());
     }
 
@@ -154,6 +215,8 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
     private boolean allPasswordsCracked() {
         return this.uncrackedTargetPasswordHashes.size() < 1;
     }
+
+    private boolean bothHashInputsFound() { return this.inputForHashesWithPrefix0 > 0 && this.inputForHashesWithPrefix1 > 0; }
 
     private void dispatchComparatorWork(ActorRef comparator) {
         this.log().debug("Dispatching comparator work");
@@ -177,6 +240,8 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
         hasher.tell(PasswordWorker.HashPasswordsMessage.builder()
                 .startPassword(this.nextPasswordToHash)
                 .endPassword(this.nextPasswordToHash + WORK_CHUNK_SIZE - 1)
+		        .hashPrefixToFind(this.hashPrefixesToFind.toArray(new String[0]))
+		        .sendPasswords(this.nextPasswordToHash < LAST_PASSWORD_TO_HASH)
                 .build(),
             this.self()
         );

@@ -74,8 +74,8 @@ public class Master extends AbstractReapedActor {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class HashFoundMessage implements Serializable {
         private static final long serialVersionUID = 1810179102712812178L;
-        private String[] hashes;
-        private int[] nonces;
+        private int inputForHashWithPrefix1;
+        private int inputForHashWithPrefix0;
     }
 
     private int currentNumberOfSlaves = 0;
@@ -174,7 +174,7 @@ public class Master extends AbstractReapedActor {
     }
 
     private void handle(HashFoundMessage message) {
-        this.pipeline.hashMiningFinished(message.getHashes(), message.getNonces());
+        this.pipeline.hashMiningFinished(message.getInputForHashWithPrefix0(), message.getInputForHashWithPrefix1());
     }
 
     private void handle(Terminated message) {

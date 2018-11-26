@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -26,6 +27,8 @@ public class PasswordWorker extends AbstractReapedActor {
         private static final long serialVersionUID = 7209760767255490488L;
         private int startPassword;
         private int endPassword;
+        private String[] hashPrefixToFind;
+        private boolean sendPasswords;
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
@@ -48,11 +51,41 @@ public class PasswordWorker extends AbstractReapedActor {
 
     private void handle(HashPasswordsMessage message) throws Exception {
         this.log().debug(String.format("Hashing passwords from %d to %d", message.startPassword, message.endPassword));
+
         String[] hashes = new String[message.endPassword - message.startPassword + 1];
+        List<String> hashPrefixesToFind = new ArrayList<>(Arrays.asList(message.getHashPrefixToFind()));
+
         for (int i = message.startPassword; i <= message.endPassword; ++i) {
-            hashes[i - message.startPassword] = AkkaUtils.SHA256(i);
+            int index = i - message.startPassword;
+            hashes[index] = AkkaUtils.SHA256(i);
+
+            for (int j = 0; j < hashPrefixesToFind.size(); ++j) {
+                if (hashes[index].startsWith(hashPrefixesToFind.get(j))) {
+                    this.submitHashFound(hashes[index], i);
+                    hashPrefixesToFind.remove(j);
+
+                    if (!message.isSendPasswords() && hashPrefixesToFind.size() < 1) {
+                        return;
+                    }
+                    break;
+                }
+            }
         }
-        this.sendHashes(hashes, message.startPassword, message.endPassword);
+
+        if (message.isSendPasswords()) {
+            this.sendHashes(hashes, message.startPassword, message.endPassword);
+        } else {
+            this.sender().tell(PasswordDispatcher.RequestWorkMessage.builder().build(), this.self());
+        }
+    }
+
+    private void submitHashFound(String hash, int hashInput) {
+        this.sender().tell(PasswordDispatcher.HashFoundMessage.builder()
+                        .hash(hash)
+                        .hashInput(hashInput)
+                        .build(),
+                this.self()
+        );
     }
 
     private void sendHashes(String[] hashes, int startPassword, int endPassword) {
