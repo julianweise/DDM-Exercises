@@ -126,7 +126,6 @@ public class ProcessingPipeline {
                 .task(Task.HASH_MINING)
                 .taskDispatcher(hashDispatcher)
                 .nextStep(Task.NONE)
-		        .maxNumberOfWorkers(2)
                 .build()
                 .setRequiredStepsConvenience(Task.GENE_ANALYSIS, Task.LINEAR_COMBINATION);
     }
