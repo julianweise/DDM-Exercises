@@ -26,10 +26,10 @@ public class ProcessingPipeline {
         private Task task;
         private ActorRef taskDispatcher;
         private Task nextStep;
-        private int[] results;
         private long startTimestamp;
-        private long endTimestamp;
-        @Builder.Default private TaskState taskState = TaskState.INITIALIZED;
+	    private long endTimestamp;
+	    @Builder.Default private int[] results = new int[0];
+	    @Builder.Default private TaskState taskState = TaskState.INITIALIZED;
         @Builder.Default private Task[] requiredSteps = new Task[0];
         @Builder.Default private int numberOfAssignedWorkers = 0;
         @Builder.Default private int maxNumberOfWorkers = Integer.MAX_VALUE;
@@ -149,7 +149,11 @@ public class ProcessingPipeline {
 	}
 
     public void passwordCrackingFinished(int[] plainPasswords) {
-        this.finishStep(Task.PASSWORD_CRACKING, plainPasswords);
+    	if (this.inputForHashesWithPrefix0 > 0 && this.inputForHashesWithPrefix1 > 0) {
+    		this.finishStep(Task.PASSWORD_CRACKING, plainPasswords);
+	    } else {
+    		this.pipelineSteps.get(Task.PASSWORD_CRACKING).setResults(plainPasswords);
+	    }
 
         this.pipelineSteps.put(Task.LINEAR_COMBINATION, this.initializeLinearCombinationStep(plainPasswords));
         this.assignAvailableWorkers();
@@ -166,6 +170,10 @@ public class ProcessingPipeline {
     public void hashMiningFinished(int inputForHashesWithPrefix0, int inputForHashesWithPrefix1) {
     	this.inputForHashesWithPrefix0 = inputForHashesWithPrefix0;
     	this.inputForHashesWithPrefix1 = inputForHashesWithPrefix1;
+
+    	if (this.pipelineSteps.get(Task.PASSWORD_CRACKING).getResults().length > 0) {
+    		this.finishStep(Task.PASSWORD_CRACKING, this.pipelineSteps.get(Task.PASSWORD_CRACKING).getResults());
+	    }
         this.tryFinishPipeline();
     }
 
