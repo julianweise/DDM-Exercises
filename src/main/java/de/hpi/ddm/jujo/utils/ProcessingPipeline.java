@@ -113,6 +113,7 @@ public class ProcessingPipeline {
 			    .task(Task.LINEAR_COMBINATION)
 			    .taskDispatcher(linearCombinationDispatcher)
 			    .nextStep(Task.HASH_MINING)
+			    .maxNumberOfWorkers(4)
 			    .build()
 			    .setRequiredStepsConvenience(Task.PASSWORD_CRACKING);
     }
@@ -156,18 +157,12 @@ public class ProcessingPipeline {
         for(int i = 0; i < times; i++) {
             this.addWorker(workerAddress);
         }
-        this.assignAvailableWorkers();
     }
 
 	private void addWorker(Address workerAddress) {
 		this.availableWorkers.add(workerAddress);
 		this.assignAvailableWorkers();
 	}
-
-    public void addWorkers(List<Address> workerAddresses) {
-        this.availableWorkers.addAll(workerAddresses);
-        this.assignAvailableWorkers();
-    }
 
     public void passwordCrackingFinished(int[] plainPasswords) {
         this.pipelineSteps.get(Task.PASSWORD_CRACKING).setResults(plainPasswords);
@@ -181,26 +176,32 @@ public class ProcessingPipeline {
         this.pipelineSteps.get(Task.GENE_ANALYSIS).setResults(bestMatchingPartners);
     	this.finishStep(Task.GENE_ANALYSIS);
 
-        if (this.pipelineSteps.get(Task.LINEAR_COMBINATION).getTaskState() == TaskState.TERMINATED) {
-        	this.pipelineSteps.put(Task.HASH_MINING, this.initializedHashMiningStep(
-                    this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults(),
-                    this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults())
-	        );
-	        this.assignAvailableWorkers();
-        }
+	    this.tryInitializeHashMiningStep();
     }
 
     public void linearCombinationFinished(int[] prefixes) {
         this.pipelineSteps.get(Task.LINEAR_COMBINATION).setResults(prefixes);
         this.finishStep(Task.LINEAR_COMBINATION);
 
-        if (this.pipelineSteps.get(Task.GENE_ANALYSIS).getTaskState() == TaskState.TERMINATED) {
-	        this.pipelineSteps.put(Task.HASH_MINING, this.initializedHashMiningStep(
-			        this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults(),
-			        this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults())
-	        );
-	        this.assignAvailableWorkers();
-        }
+        this.tryInitializeHashMiningStep();
+    }
+
+    private void tryInitializeHashMiningStep() {
+    	PipelineStep geneAnalysis = this.pipelineSteps.get(Task.GENE_ANALYSIS);
+    	PipelineStep linearCombination = this.pipelineSteps.get(Task.LINEAR_COMBINATION);
+
+    	if (geneAnalysis == null || geneAnalysis.getTaskState() != TaskState.TERMINATED) {
+    		return;
+	    }
+	    if (linearCombination == null || linearCombination.getTaskState() != TaskState.TERMINATED) {
+	    	return;
+	    }
+
+	    this.pipelineSteps.put(Task.HASH_MINING, this.initializedHashMiningStep(
+			    geneAnalysis.getResults(),
+			    linearCombination.getResults())
+	    );
+	    this.assignAvailableWorkers();
     }
 
     public void hashMiningFinished(String[] hashes) {
@@ -210,6 +211,16 @@ public class ProcessingPipeline {
 
         this.printFinalResults(hashes);
     }
+
+	private void finishStep(Task stepTask) {
+		PipelineStep step = this.pipelineSteps.get(stepTask);
+		step.setTaskState(TaskState.TERMINATED);
+		step.setEndTimestamp(System.currentTimeMillis());
+
+		this.master.log().info(String.format("%s finished after %d ms", step.getTask(), step.getEndTimestamp() - step.getStartTimestamp()));
+
+
+	}
 
     private void printFinalResults(String[] finalHashes) {
     	List<String> names = this.master.getInputDataForColumn(Master.INPUT_DATA_NAME_COLUMN);
@@ -279,14 +290,6 @@ public class ProcessingPipeline {
     	return String.format("%1$-" + OUTPUT_COLUMN_LENGTH + "s", input);
     }
 
-    private void finishStep(Task stepTask) {
-    	PipelineStep step = this.pipelineSteps.get(stepTask);
-    	step.setTaskState(TaskState.TERMINATED);
-    	step.setEndTimestamp(System.currentTimeMillis());
-
-    	this.master.log().info(String.format("%s finished after %d ms", step.getTask(), step.getEndTimestamp() - step.getStartTimestamp()));
-    }
-
     private void assignAvailableWorkers() {
         if (!this.enabled) {
             return;
@@ -300,6 +303,7 @@ public class ProcessingPipeline {
 
     private boolean assignNextAvailableWorker() {
         PipelineStep stepToEnhance = null;
+
         for(PipelineStep step : this.getStepsWhichNeedMoreWorkers()) {
             if (step.getMaxNumberOfWorkers() <= step.getNumberOfAssignedWorkers()) {
                 continue;
@@ -315,25 +319,24 @@ public class ProcessingPipeline {
         if (stepToEnhance == null) {
             return false;
         }
-        this.assignWorkerToStep(stepToEnhance);
+        this.assignWorkerToStep(stepToEnhance, this.availableWorkers.remove(0));
         return true;
     }
 
-    private void assignWorkerToStep(PipelineStep step) {
-    	if (step.getTaskState() == TaskState.INITIALIZED) {
-    		step.setStartTimestamp(System.currentTimeMillis());
-    		step.setTaskState(TaskState.RUNNING);
-    		this.master.log().info(String.format("%s started", step.getTask()));
+    private void assignWorkerToStep(PipelineStep step, Address workerAddress) {
+	    if (step.getTaskState() == TaskState.INITIALIZED) {
+		    step.setStartTimestamp(System.currentTimeMillis());
+		    step.setTaskState(TaskState.RUNNING);
+		    this.master.log().info(String.format("%s started", step.getTask()));
 	    }
 
-        step.increaseNumberOfAssignedWorkers();
-        Address worker = this.availableWorkers.remove(0);
-        step.getTaskDispatcher().tell(DispatcherMessages.AddComputationNodeMessage.builder()
-                .workerAddress(worker)
-                .build(),
-            this.master.self()
-        );
-        this.master.log().info(String.format("%s has now %d workers", step.getTask(), step.getNumberOfAssignedWorkers()));
+	    step.increaseNumberOfAssignedWorkers();
+	    step.getTaskDispatcher().tell(DispatcherMessages.AddComputationNodeMessage.builder()
+					    .workerAddress(workerAddress)
+					    .build(),
+			    this.master.self()
+	    );
+	    this.master.log().info(String.format("%s has now %d workers", step.getTask(), step.getNumberOfAssignedWorkers()));
     }
 
     private List<PipelineStep> getStepsWhichNeedMoreWorkers() {

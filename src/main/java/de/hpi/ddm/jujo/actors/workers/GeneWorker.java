@@ -4,6 +4,7 @@ import akka.actor.AbstractActor;
 import akka.actor.Props;
 import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.dispatchers.GeneDispatcher;
+import de.hpi.ddm.jujo.utils.SuffixArray;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -67,7 +68,7 @@ public class GeneWorker extends AbstractReapedActor {
             if (otherIndex == thisIndex)
                 continue;
 
-            String longestOverlap = this.longestOverlap(
+            String longestOverlap = longestCommonSubstring(
                     this.geneSequences.get(thisIndex),
                     this.geneSequences.get(otherIndex)
             );
@@ -116,5 +117,58 @@ public class GeneWorker extends AbstractReapedActor {
             lastRow = temp;
         }
         return str1.substring(longestSubstringStart, longestSubstringStart + longestSubstringLength);
+    }
+
+    /*
+    Taken from: https://algs4.cs.princeton.edu/63suffix/LongestCommonSubstring.java.html
+    */
+
+    /**
+     * Returns the longest common string of the two specified strings.
+     *
+     * @param  s one string
+     * @param  t the other string
+     * @return the longest common string that appears as a substring
+     *         in both {@code s} and {@code t}; the empty string
+     *         if no such string
+     */
+    public static String longestCommonSubstring(String s, String t) {
+        SuffixArray suffix1 = new SuffixArray(s);
+        SuffixArray suffix2 = new SuffixArray(t);
+
+        // find longest common substring by "merging" sorted suffixes
+        String lcs = "";
+        int i = 0, j = 0;
+        while (i < s.length() && j < t.length()) {
+            int p = suffix1.index(i);
+            int q = suffix2.index(j);
+            String x = lcp(s, p, t, q);
+            if (x.length() > lcs.length()) lcs = x;
+            if (compare(s, p, t, q) < 0) i++;
+            else                         j++;
+        }
+        return lcs;
+    }
+
+    // compare suffix s[p..] and suffix t[q..]
+    private static int compare(String s, int p, String t, int q) {
+        int n = Math.min(s.length() - p, t.length() - q);
+        for (int i = 0; i < n; i++) {
+            if (s.charAt(p + i) != t.charAt(q + i))
+                return s.charAt(p+i) - t.charAt(q+i);
+        }
+        if      (s.length() - p < t.length() - q) return -1;
+        else if (s.length() - p > t.length() - q) return +1;
+        else                                      return  0;
+    }
+
+    // return the longest common prefix of suffix s[p..] and suffix t[q..]
+    private static String lcp(String s, int p, String t, int q) {
+        int n = Math.min(s.length() - p, t.length() - q);
+        for (int i = 0; i < n; i++) {
+            if (s.charAt(p + i) != t.charAt(q + i))
+                return s.substring(p, p + i);
+        }
+        return s.substring(p, p + n);
     }
 }

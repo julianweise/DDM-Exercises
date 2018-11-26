@@ -4,6 +4,7 @@ import akka.actor.AbstractActor;
 import akka.actor.Props;
 import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.dispatchers.HashDispatcher;
+import de.hpi.ddm.jujo.utils.AkkaUtils;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -37,7 +38,7 @@ public class HashWorker extends AbstractReapedActor {
                 .build();
     }
 
-    private void handle(FindHashMessage message) {
+    private void handle(FindHashMessage message) throws Exception {
         String hash = this.findHash(message.partner, message.prefix);
         this.sender().tell(HashDispatcher.HashFoundMessage.builder()
                 .hash(hash)
@@ -47,30 +48,14 @@ public class HashWorker extends AbstractReapedActor {
         );
     }
 
-    private String findHash(int content, String fullPrefix) {
-        int nonce = 0;
+    private String findHash(int content, String fullPrefix) throws Exception {
+        int nonce = 1;
         while (true) {
-            String hash = this.hash(content + nonce++);
+            String hash = AkkaUtils.SHA256(content + nonce);
             if (hash.startsWith(fullPrefix)) {
                 return hash;
             }
-        }
-    }
-
-    @SuppressWarnings("Duplicates")
-    private String hash(int number) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hashedBytes = digest.digest(String.valueOf(number).getBytes(StandardCharsets.UTF_8));
-
-            StringBuilder stringBuffer = new StringBuilder();
-            for (byte hashedByte : hashedBytes) {
-                stringBuffer.append(Integer.toString((hashedByte & 0xff) + 0x100, 16).substring(1));
-            }
-            return stringBuffer.toString();
-        }
-        catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e.getMessage());
+            nonce += 2;
         }
     }
 }

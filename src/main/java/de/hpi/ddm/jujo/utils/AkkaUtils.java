@@ -8,6 +8,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -54,5 +56,16 @@ public class AkkaUtils {
                 new VariableBinding("port", port)
         );
         return remoteConfig.withFallback(baseConfig);
+    }
+
+    public static String SHA256(int data) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hashedBytes = digest.digest(String.valueOf(data).getBytes(StandardCharsets.UTF_8));
+
+        StringBuilder stringBuffer = new StringBuilder();
+        for (byte hashedByte : hashedBytes) {
+            stringBuffer.append(Integer.toString((hashedByte & 0xff) + 0x100, 16).substring(1));
+        }
+        return stringBuffer.toString();
     }
 }

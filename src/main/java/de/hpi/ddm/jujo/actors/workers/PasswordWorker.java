@@ -4,6 +4,7 @@ import akka.actor.AbstractActor;
 import akka.actor.Props;
 import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.dispatchers.PasswordDispatcher;
+import de.hpi.ddm.jujo.utils.AkkaUtils;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -48,30 +49,13 @@ public class PasswordWorker extends AbstractReapedActor {
                 .build();
     }
 
-    private void handle(HashPasswordsMessage message) {
+    private void handle(HashPasswordsMessage message) throws Exception {
         this.log().debug(String.format("Hashing passwords from %d to %d", message.startPassword, message.endPassword));
         String[] hashes = new String[message.endPassword - message.startPassword + 1];
         for (int i = message.startPassword; i <= message.endPassword; ++i) {
-            hashes[i - message.startPassword] = this.hash(i);
+            hashes[i - message.startPassword] = AkkaUtils.SHA256(i);
         }
         this.sendHashes(hashes, message.startPassword, message.endPassword);
-    }
-
-    @SuppressWarnings("Duplicates")
-    private String hash(int number) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hashedBytes = digest.digest(String.valueOf(number).getBytes(StandardCharsets.UTF_8));
-
-            StringBuilder stringBuffer = new StringBuilder();
-            for (byte hashedByte : hashedBytes) {
-                stringBuffer.append(Integer.toString((hashedByte & 0xff) + 0x100, 16).substring(1));
-            }
-            return stringBuffer.toString();
-        }
-        catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e.getMessage());
-        }
     }
 
     private void sendHashes(String[] hashes, int startPassword, int endPassword) {
