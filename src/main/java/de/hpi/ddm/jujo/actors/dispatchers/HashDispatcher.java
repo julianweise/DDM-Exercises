@@ -26,7 +26,6 @@ public class HashDispatcher extends AbstractWorkDispatcher {
         private String hash;
     }
 
-    private int activeSolvers;
     private int[] partnerIds;
     private int[] prefixes;
     private String[] hashes;
@@ -53,7 +52,6 @@ public class HashDispatcher extends AbstractWorkDispatcher {
     }
 
     private void handle(HashFoundMessage message) {
-        this.activeSolvers--;
         this.numberOfUnhashedPartners--;
         this.hashes[message.originalPerson] = message.hash;
         this.dispatchWork(this.sender());
@@ -81,7 +79,6 @@ public class HashDispatcher extends AbstractWorkDispatcher {
 
         String hashPrefix = this.prefixes[this.nextPersonToHash] > 0 ? "11111" : "00000";
 
-        this.activeSolvers++;
         worker.tell(HashWorker.FindHashMessage.builder()
                 .originalPerson(this.nextPersonToHash)
                 .partner(this.partnerIds[this.nextPersonToHash])
