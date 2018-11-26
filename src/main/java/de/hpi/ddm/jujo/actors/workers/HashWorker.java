@@ -5,7 +5,6 @@ import akka.actor.Props;
 import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.dispatchers.HashDispatcher;
 import de.hpi.ddm.jujo.utils.AkkaUtils;
-import javafx.util.Pair;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

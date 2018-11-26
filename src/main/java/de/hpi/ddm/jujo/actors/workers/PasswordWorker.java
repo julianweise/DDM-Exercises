@@ -11,9 +11,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -74,7 +71,7 @@ public class PasswordWorker extends AbstractReapedActor {
         ArrayList<PasswordDispatcher.CrackedPassword> crackedPasswords = new ArrayList<>();
         for (int i = 0; i < message.generatedPasswordHashes.length; ++i) {
             for (String targetPasswordHash : message.targetPasswordHashes) {
-                if (targetPasswordHash.equals(message.generatedPasswordHashes[i])) {
+                if (targetPasswordHash.equals(message.getGeneratedPasswordHashes()[i])) {
                     crackedPasswords.add(PasswordDispatcher.CrackedPassword.builder()
                         .hashedPassword(targetPasswordHash)
                         .plainPassword(i + message.startPassword)
