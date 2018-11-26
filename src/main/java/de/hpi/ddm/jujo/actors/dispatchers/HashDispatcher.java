@@ -22,22 +22,23 @@ public class HashDispatcher extends AbstractWorkDispatcher {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class HashFoundMessage implements Serializable {
         private static final long serialVersionUID = -6506901694425938486L;
-        private int originalPerson;
+        private int hashInput;
         private String hash;
     }
 
     private int[] partnerIds;
     private int[] prefixes;
     private String[] hashes;
-    private int nextPersonToHash = 0;
-    private int numberOfUnhashedPartners;
+    private int[] nonces;
+    private String[] hashPrefixesToFind = { "11111", "00000" };
+    private int nextHashPrefixToFind = 0;
 
     private HashDispatcher(ActorRef master, int[] partnerIds, int[] prefixes) {
         super(master, HashWorker.props());
         this.partnerIds = partnerIds;
         this.prefixes = prefixes;
-        this.hashes = new String[partnerIds.length];
-        this.numberOfUnhashedPartners = this.partnerIds.length;
+        this.hashes = new String[this.partnerIds.length];
+        this.nonces = new int[this.partnerIds.length];
     }
 
     @Override
@@ -52,11 +53,22 @@ public class HashDispatcher extends AbstractWorkDispatcher {
     }
 
     private void handle(HashFoundMessage message) {
-        this.numberOfUnhashedPartners--;
-        this.hashes[message.originalPerson] = message.hash;
+    	int hashPrefix = message.getHash().startsWith("11111") ? 1 : -1;
+    	boolean allHashesFound = true;
+    	for (int i = 0; i < this.partnerIds.length; ++i) {
+    		if (prefixes[i] == hashPrefix) {
+    			this.hashes[i] = message.getHash();
+    			this.nonces[i] = message.getHashInput() - this.partnerIds[i];
+		    }
+
+		    if (this.hashes[i] == null) {
+		    	allHashesFound = false;
+		    }
+	    }
+
         this.dispatchWork(this.sender());
 
-        if (this.numberOfUnhashedPartners < 1) {
+        if (allHashesFound) {
             this.submitHashes();
         }
     }
@@ -65,6 +77,7 @@ public class HashDispatcher extends AbstractWorkDispatcher {
         this.log().debug("Submitting generated partner hashes to master.");
         this.master.tell(Master.HashFoundMessage.builder()
                 .hashes(this.hashes)
+		        .nonces(this.nonces)
                 .build(),
             this.self()
         );
@@ -72,25 +85,24 @@ public class HashDispatcher extends AbstractWorkDispatcher {
 
     @Override
     protected void dispatchWork(ActorRef worker) {
-        if (this.nextPersonToHash >= this.partnerIds.length) {
+        if (!this.hasMoreWork()) {
             worker.tell(PoisonPill.getInstance(), ActorRef.noSender());
             return;
         }
 
-        String hashPrefix = this.prefixes[this.nextPersonToHash] > 0 ? "11111" : "00000";
+        String hashPrefix = this.hashPrefixesToFind[this.nextHashPrefixToFind];
 
         worker.tell(HashWorker.FindHashMessage.builder()
-                .originalPerson(this.nextPersonToHash)
-                .partner(this.partnerIds[this.nextPersonToHash])
+                .minHashInput(this.partnerIds.length - 1)
                 .prefix(hashPrefix)
                 .build(),
             this.self()
         );
-        this.nextPersonToHash++;
+        this.nextHashPrefixToFind++;
     }
 
     @Override
     protected boolean hasMoreWork() {
-        return this.numberOfUnhashedPartners > 0;
+        return this.nextHashPrefixToFind < this.hashPrefixesToFind.length;
     }
 }

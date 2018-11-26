@@ -126,7 +126,7 @@ public class ProcessingPipeline {
                 .task(Task.HASH_MINING)
                 .taskDispatcher(hashDispatcher)
                 .nextStep(Task.NONE)
-		        .maxNumberOfWorkers(partnerIds.length)
+		        .maxNumberOfWorkers(2)
                 .build()
                 .setRequiredStepsConvenience(Task.GENE_ANALYSIS, Task.LINEAR_COMBINATION);
     }
@@ -165,23 +165,20 @@ public class ProcessingPipeline {
 	}
 
     public void passwordCrackingFinished(int[] plainPasswords) {
-        this.pipelineSteps.get(Task.PASSWORD_CRACKING).setResults(plainPasswords);
-        this.finishStep(Task.PASSWORD_CRACKING);
+        this.finishStep(Task.PASSWORD_CRACKING, plainPasswords);
 
         this.pipelineSteps.put(Task.LINEAR_COMBINATION, this.initializeLinearCombinationStep(plainPasswords));
         this.assignAvailableWorkers();
     }
 
     public void geneAnalysisFinished(int[] bestMatchingPartners) {
-        this.pipelineSteps.get(Task.GENE_ANALYSIS).setResults(bestMatchingPartners);
-    	this.finishStep(Task.GENE_ANALYSIS);
+    	this.finishStep(Task.GENE_ANALYSIS, bestMatchingPartners);
 
 	    this.tryInitializeHashMiningStep();
     }
 
     public void linearCombinationFinished(int[] prefixes) {
-        this.pipelineSteps.get(Task.LINEAR_COMBINATION).setResults(prefixes);
-        this.finishStep(Task.LINEAR_COMBINATION);
+        this.finishStep(Task.LINEAR_COMBINATION, prefixes);
 
         this.tryInitializeHashMiningStep();
     }
@@ -204,22 +201,21 @@ public class ProcessingPipeline {
 	    this.assignAvailableWorkers();
     }
 
-    public void hashMiningFinished(String[] hashes) {
-        this.finishStep(Task.HASH_MINING);
+    public void hashMiningFinished(String[] hashes, int[] hashNonces) {
+        this.finishStep(Task.HASH_MINING, hashNonces);
 
         this.endTimestamp = System.currentTimeMillis();
 
         this.printFinalResults(hashes);
     }
 
-	private void finishStep(Task stepTask) {
+	private void finishStep(Task stepTask, int[] results) {
 		PipelineStep step = this.pipelineSteps.get(stepTask);
+		step.setResults(results);
 		step.setTaskState(TaskState.TERMINATED);
 		step.setEndTimestamp(System.currentTimeMillis());
 
 		this.master.log().info(String.format("%s finished after %d ms", step.getTask(), step.getEndTimestamp() - step.getStartTimestamp()));
-
-
 	}
 
     private void printFinalResults(String[] finalHashes) {
@@ -227,6 +223,7 @@ public class ProcessingPipeline {
     	int[] passwords = this.pipelineSteps.get(Task.PASSWORD_CRACKING).getResults();
     	int[] linearPrefixes = this.pipelineSteps.get(Task.LINEAR_COMBINATION).getResults();
     	int[] matchingGenePartners = this.pipelineSteps.get(Task.GENE_ANALYSIS).getResults();
+    	int[] hashNonces = this.pipelineSteps.get(Task.HASH_MINING).getResults();
 
         System.out.println("\n\n\n");
         System.out.println(" ========================== [FINAL RESULTS] ==========================");
@@ -238,6 +235,7 @@ public class ProcessingPipeline {
 		            passwords[i],
 		            linearPrefixes[i],
 		            names.get(matchingGenePartners[i]),
+		            hashNonces[i],
 		            finalHashes[i]
             );
         }
@@ -259,16 +257,18 @@ public class ProcessingPipeline {
     private static final String OUTPUT_PASSWORD_COLUMN              = "Password    ";
     private static final String OUTPUT_PASSWORD_PREFIX_COLUMN       = "Prefix      ";
     private static final String OUTPUT_BEST_GENE_PARTNER_COLUMN     = "Partner     ";
+    private static final String OUTPUT_FINAL_HASH_NONCE_COLUMN      = "Hash-Nonce  ";
     private static final String OUTPUT_FINAL_HASH_COLUMN            = "Hash        ";
     private static final int OUTPUT_COLUMN_LENGTH = 12;
 
     private void printFinalResultsTableHeader() {
-    	String columns = String.format(" %s| %s| %s| %s| %s| %s",
+    	String columns = String.format(" %s| %s| %s| %s| %s| %s| %s",
 			    OUTPUT_ID_COLUMN,
 			    OUTPUT_NAME_COLUMN,
 			    OUTPUT_PASSWORD_COLUMN,
 			    OUTPUT_PASSWORD_PREFIX_COLUMN,
 			    OUTPUT_BEST_GENE_PARTNER_COLUMN,
+			    OUTPUT_FINAL_HASH_NONCE_COLUMN,
 			    OUTPUT_FINAL_HASH_COLUMN);
     	char[] line = new char[columns.length()];
 	    Arrays.fill(line, '-');
@@ -276,13 +276,14 @@ public class ProcessingPipeline {
 	    System.out.printf("%s\n%s\n", columns, new String(line));
     }
 
-    private void printFinalResultsRow(int id, String name, int password, int passwordPrefix, String genePartner, String hash) {
-	    System.out.printf(" %s| %s| %s| %s| %s| %s\n",
+    private void printFinalResultsRow(int id, String name, int password, int passwordPrefix, String genePartner, int hashNonce, String hash) {
+	    System.out.printf(" %s| %s| %s| %s| %s| %s| %s\n",
 			    this.padRight(id),
 			    this.padRight(name),
 			    this.padRight(password),
 			    this.padRight(passwordPrefix),
 			    this.padRight(genePartner),
+			    this.padRight(hashNonce),
 			    this.padRight(hash));
     }
 

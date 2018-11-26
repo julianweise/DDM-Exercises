@@ -5,6 +5,7 @@ import akka.actor.Props;
 import de.hpi.ddm.jujo.actors.AbstractReapedActor;
 import de.hpi.ddm.jujo.actors.dispatchers.HashDispatcher;
 import de.hpi.ddm.jujo.utils.AkkaUtils;
+import javafx.util.Pair;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -25,8 +26,7 @@ public class HashWorker extends AbstractReapedActor {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static final class FindHashMessage implements Serializable {
         private static final long serialVersionUID = -1767893664962431821L;
-        private int originalPerson;
-        private int partner;
+        private int minHashInput;
         private String prefix;
     }
 
@@ -39,23 +39,23 @@ public class HashWorker extends AbstractReapedActor {
     }
 
     private void handle(FindHashMessage message) throws Exception {
-        String hash = this.findHash(message.partner, message.prefix);
+        Pair<String, Integer> hashAndInput = this.findHash(message.getMinHashInput(), message.getPrefix());
         this.sender().tell(HashDispatcher.HashFoundMessage.builder()
-                .hash(hash)
-                .originalPerson(message.originalPerson)
+                .hash(hashAndInput.getKey())
+                .hashInput(hashAndInput.getValue())
                 .build(),
             this.self()
         );
     }
 
-    private String findHash(int content, String fullPrefix) throws Exception {
-        int nonce = 1;
+    private Pair<String, Integer> findHash(int content, String fullPrefix) throws Exception {
+        int nonce = 0;
         while (true) {
             String hash = AkkaUtils.SHA256(content + nonce);
             if (hash.startsWith(fullPrefix)) {
-                return hash;
+                return new Pair<>(hash, content + nonce);
             }
-            nonce += 2;
+            nonce++;
         }
     }
 }
