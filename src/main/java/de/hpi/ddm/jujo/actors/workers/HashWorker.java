@@ -11,10 +11,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Random;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class HashWorker extends AbstractReapedActor {
 
@@ -23,39 +22,49 @@ public class HashWorker extends AbstractReapedActor {
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static final class FindHashMessage implements Serializable {
+    public static final class FindHashesMessage implements Serializable {
         private static final long serialVersionUID = -1767893664962431821L;
-        private int originalPerson;
-        private int partner;
-        private String prefix;
+        private int startHashInput;
+        private int endHashInput;
+        private String[] targetPrefixes;
     }
 
     @Override
     public AbstractActor.Receive createReceive() {
         return receiveBuilder()
-                .match(FindHashMessage.class, this::handle)
+                .match(FindHashesMessage.class, this::handle)
 		        .matchAny(this::handleAny)
                 .build();
     }
 
-    private void handle(FindHashMessage message) throws Exception {
-        String hash = this.findHash(message.partner, message.prefix);
+    private void handle(FindHashesMessage message) throws Exception {
+        List<String> targetHashPrefixes = new ArrayList<>(Arrays.asList(message.getTargetPrefixes()));
+
+        for (int hashInput = message.getStartHashInput(); hashInput < message.getEndHashInput(); ++hashInput) {
+            String hash = AkkaUtils.SHA256(hashInput);
+
+            for (int i = 0; i < targetHashPrefixes.size(); ++i) {
+                if (hash.startsWith(targetHashPrefixes.get(i))) {
+                    this.submitHashFound(hash, hashInput);
+                    targetHashPrefixes.remove(i);
+
+                    if (targetHashPrefixes.size() < 1) {
+                        return;
+                    }
+                    break;
+                }
+            }
+        }
+
+        this.sender().tell(HashDispatcher.RequestWorkMessage.builder().build(), this.self());
+    }
+
+    private void submitHashFound(String hash, int hashInput) {
         this.sender().tell(HashDispatcher.HashFoundMessage.builder()
                 .hash(hash)
-                .originalPerson(message.originalPerson)
+                .hashInput(hashInput)
                 .build(),
             this.self()
         );
-    }
-
-    private String findHash(int content, String fullPrefix) throws Exception {
-        int nonce = 1;
-        while (true) {
-            String hash = AkkaUtils.SHA256(content + nonce);
-            if (hash.startsWith(fullPrefix)) {
-                return hash;
-            }
-            nonce += 2;
-        }
     }
 }
