@@ -18,11 +18,11 @@ import java.util.List;
 public class HashDispatcher extends AbstractWorkDispatcher {
 
     private static final int HASH_CHUNK_SIZE = 10000;
+    private static final String HASH_PREFIX0 = "00000";
     private static final String HASH_PREFIX1 = "11111";
-    private static final String HASH_PREFIX2 = "00000";
 
-    public static Props props(ActorRef master, int[] partnerIds, int prefixes[]) {
-        return Props.create(HashDispatcher.class, () -> new HashDispatcher(master, partnerIds, prefixes));
+    public static Props props(ActorRef master, int numberOfPersons) {
+        return Props.create(HashDispatcher.class, () -> new HashDispatcher(master, numberOfPersons));
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
@@ -37,23 +37,16 @@ public class HashDispatcher extends AbstractWorkDispatcher {
         private static final long serialVersionUID = -7147051060944662922L;
     }
 
-    private int[] partnerIds;
-    private int[] prefixes;
-    private String[] hashes;
-    private int[] nonces;
+    private int[] hashInputs = new int[2];
     private List<String> hashPrefixesToFind = new ArrayList<>();
     private int nextInputToHash = 0;
     private boolean hashesSubmitted = false;
 
-    private HashDispatcher(ActorRef master, int[] partnerIds, int[] prefixes) {
+    private HashDispatcher(ActorRef master, int numberOfPersons) {
         super(master, HashWorker.props());
-        this.partnerIds = partnerIds;
-        this.prefixes = prefixes;
-        this.hashes = new String[this.partnerIds.length];
-        this.nonces = new int[this.partnerIds.length];
-        this.nextInputToHash = this.partnerIds.length - 1;
+        this.nextInputToHash = numberOfPersons - 1;
         this.hashPrefixesToFind.add(HASH_PREFIX1);
-        this.hashPrefixesToFind.add(HASH_PREFIX2);
+        this.hashPrefixesToFind.add(HASH_PREFIX0);
     }
 
     @Override
@@ -73,34 +66,35 @@ public class HashDispatcher extends AbstractWorkDispatcher {
     }
 
     private void handle(HashFoundMessage message) {
-    	int hashPrefix = message.getHash().startsWith("11111") ? 1 : -1;
-    	this.hashPrefixesToFind.remove(message.getHash().substring(0, 5));
-
-    	boolean allHashesFound = true;
-    	for (int i = 0; i < this.partnerIds.length; ++i) {
-    		if (prefixes[i] == hashPrefix) {
-    			this.hashes[i] = message.getHash();
-    			this.nonces[i] = message.getHashInput() - this.partnerIds[i];
-		    }
-
-		    if (this.hashes[i] == null) {
-		    	allHashesFound = false;
-		    }
-	    }
-
+        if (message.getHash().startsWith(HASH_PREFIX0)) {
+            this.hashInputs[0] = message.getHashInput();
+            this.hashPrefixesToFind.remove(HASH_PREFIX0);
+        } else {
+            this.hashInputs[1] = message.getHashInput();
+            this.hashPrefixesToFind.remove(HASH_PREFIX1);
+        }
         this.dispatchWork(this.sender());
 
-        if (!this.hashesSubmitted && allHashesFound) {
-            this.hashesSubmitted = true;
+        if (!this.hashesSubmitted && this.allHashesFound()) {
             this.submitHashes();
         }
     }
 
+    private boolean allHashesFound() {
+        for (int hashInput : this.hashInputs) {
+            if (hashInput <= 0) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void submitHashes() {
-        this.log().debug("Submitting generated partner hashes to master.");
-        this.master.tell(Master.HashFoundMessage.builder()
-                .hashes(this.hashes)
-		        .nonces(this.nonces)
+	    this.log().debug("Submitting generated partner hashes to master.");
+	    this.hashesSubmitted = true;
+	    this.master.tell(Master.HashFoundMessage.builder()
+			    .hashInputs(this.hashInputs)
                 .build(),
             this.self()
         );
