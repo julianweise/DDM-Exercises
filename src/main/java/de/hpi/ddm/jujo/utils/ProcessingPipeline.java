@@ -77,7 +77,6 @@ public class ProcessingPipeline {
 
     private void initializePipelineSteps() {
         this.pipelineSteps.put(Task.PASSWORD_CRACKING, this.initializePasswordCrackingStep());
-        this.pipelineSteps.put(Task.GENE_ANALYSIS, this.initializeGeneAnalysisStep());
     }
 
     private PipelineStep initializePasswordCrackingStep() {
@@ -166,7 +165,8 @@ public class ProcessingPipeline {
     public void passwordCrackingFinished(int[] plainPasswords) {
         this.finishStep(Task.PASSWORD_CRACKING, plainPasswords);
 
-        this.pipelineSteps.put(Task.LINEAR_COMBINATION, this.initializeLinearCombinationStep(plainPasswords));
+	    this.pipelineSteps.put(Task.GENE_ANALYSIS, this.initializeGeneAnalysisStep());
+	    this.pipelineSteps.put(Task.LINEAR_COMBINATION, this.initializeLinearCombinationStep(plainPasswords));
         this.assignAvailableWorkers();
     }
 

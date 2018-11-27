@@ -26,22 +26,13 @@ public class PasswordWorker extends AbstractReapedActor {
         private static final long serialVersionUID = 7209760767255490488L;
         private int startPassword;
         private int endPassword;
-    }
-
-    @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static class ComparePasswordsMessage implements Serializable {
-        private static final long serialVersionUID = -8003373471127707382L;
         private Set<String> targetPasswordHashes;
-        private String[] generatedPasswordHashes;
-        private int startPassword;
-        private int endPassword;
     }
 
     @Override
     public AbstractActor.Receive createReceive() {
         return receiveBuilder()
                 .match(HashPasswordsMessage.class, this::handle)
-                .match(ComparePasswordsMessage.class, this::handle)
 		        .matchAny(this::handleAny)
                 .build();
     }
@@ -52,48 +43,26 @@ public class PasswordWorker extends AbstractReapedActor {
         for (int i = message.startPassword; i <= message.endPassword; ++i) {
             hashes[i - message.startPassword] = AkkaUtils.SHA256(i);
         }
-        this.sendHashes(hashes, message.startPassword, message.endPassword);
-    }
+        List<String> targetPasswordsHashes = new ArrayList<>(message.getTargetPasswordHashes());
+	    for (int i = 0; i < hashes.length; ++i) {
+	    	for (int j = 0; j <targetPasswordsHashes.size(); ++j) {
+	    		if (targetPasswordsHashes.get(j).equals(hashes[i])) {
+				    this.sender().tell(PasswordDispatcher.PasswordCrackedMessage.builder()
+						    .hashedPassword(hashes[i])
+						    .plainPassword(i + message.getStartPassword())
+						    .build(),
+					    this.self()
+				    );
 
-    private void sendHashes(String[] hashes, int startPassword, int endPassword) {
-        this.context().parent().tell(
-                PasswordDispatcher.PasswordsHashedMessage.builder()
-                        .generatedPasswordHashes(hashes)
-                        .startPassword(startPassword)
-                        .endPassword(endPassword)
-                        .build(),
-                this.self()
-        );
-    }
+				    targetPasswordsHashes.remove(j);
+				    break;
+			    }
+		    }
 
-    private void handle(ComparePasswordsMessage message) {
-        this.log().debug(String.format("Comparing %d password hashes against %d target hashes", message.generatedPasswordHashes.length, message.targetPasswordHashes.size()));
-        ArrayList<PasswordDispatcher.CrackedPassword> crackedPasswords = new ArrayList<>();
-        for (int i = 0; i < message.generatedPasswordHashes.length; ++i) {
-            for (String targetPasswordHash : message.targetPasswordHashes) {
-                if (targetPasswordHash.equals(message.getGeneratedPasswordHashes()[i])) {
-                    crackedPasswords.add(PasswordDispatcher.CrackedPassword.builder()
-                        .hashedPassword(targetPasswordHash)
-                        .plainPassword(i + message.startPassword)
-                        .build()
-                    );
-                    break;
-                }
-            }
-
-            if (crackedPasswords.size() >= message.targetPasswordHashes.size()) {
-                // found all passwords for this message
-                break;
-            }
-        }
-        this.sendCrackedPasswords(crackedPasswords);
-    }
-
-    private void sendCrackedPasswords(List<PasswordDispatcher.CrackedPassword> crackedPasswords) {
-        this.sender().tell(PasswordDispatcher.PasswordsCrackedMessage.builder()
-                .crackedPasswords(crackedPasswords.toArray(new PasswordDispatcher.CrackedPassword[0]))
-                .build(),
-            this.self()
-        );
+		    if (targetPasswordsHashes.size() < 1) {
+		    	break;
+		    }
+	    }
+	    this.sender().tell(PasswordDispatcher.RequestWorkMessage.builder().build(), this.self());
     }
 }

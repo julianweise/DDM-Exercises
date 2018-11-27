@@ -20,26 +20,21 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
 
     private static final int LAST_PASSWORD_TO_HASH = 999999;
     private static final int WORK_CHUNK_SIZE = 10000;
-    private static final float COMPARATOR_UNDERFLOW_RATIO = 1.5f;
 
     public static Props props(ActorRef master, final List<String> targetPasswordHashes) {
         return Props.create(PasswordDispatcher.class, () -> new PasswordDispatcher(master, targetPasswordHashes));
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static class PasswordsHashedMessage implements Serializable {
-
-        private static final long serialVersionUID = 4933006742453684724L;
-        private String[] generatedPasswordHashes;
-        private int startPassword;
-        private int endPassword;
+    public static class PasswordCrackedMessage implements Serializable {
+        private static final long serialVersionUID = -5853384945199531340L;
+        private String hashedPassword;
+        private int plainPassword;
     }
 
-    @Data @Builder @NoArgsConstructor @AllArgsConstructor
-    public static class PasswordsCrackedMessage implements Serializable {
-
-        private static final long serialVersionUID = -5853384945199531340L;
-        private CrackedPassword[] crackedPasswords;
+    @Data @Builder @NoArgsConstructor
+    public static class RequestWorkMessage implements Serializable {
+        private static final long serialVersionUID = 8044248503397726954L;
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
@@ -50,9 +45,6 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
 
     private Set<String> uncrackedTargetPasswordHashes;
     private ArrayList<CrackedPassword> crackedPasswords = new ArrayList<>();
-    private List<PasswordsHashedMessage> hashesToCompare = new ArrayList<>();
-    private int activeHashers = 0;
-    private int activeCompatators = 0;
     private int nextPasswordToHash = 0;
 
     private PasswordDispatcher(ActorRef master, List<String> targetPasswordHashes) {
@@ -66,8 +58,8 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
     @Override
     public Receive createReceive() {
         return handleDefaultMessages(receiveBuilder()
-                .match(PasswordsHashedMessage.class, this::handle)
-                .match(PasswordsCrackedMessage.class, this::handle));
+		        .match(RequestWorkMessage.class, this::handle)
+                .match(PasswordCrackedMessage.class, this::handle));
     }
 
     @Override
@@ -75,17 +67,16 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
         // nothing to do
     }
 
-    private void handle(PasswordsHashedMessage message) {
-        this.hashesToCompare.add(message);
-        this.activeHashers--;
-        this.dispatchWork(this.sender());
+    private void handle(RequestWorkMessage message) {
+    	this.dispatchWork(this.sender());
     }
 
-    private void handle(PasswordsCrackedMessage message) {
-        for(CrackedPassword crackedPassword : message.crackedPasswords) {
-            saveCrackedPassword(crackedPassword);
-        }
-        this.activeCompatators--;
+    private void handle(PasswordCrackedMessage message) {
+        this.saveCrackedPassword(CrackedPassword.builder()
+	        .hashedPassword(message.getHashedPassword())
+	        .plainPassword(message.getPlainPassword())
+	        .build()
+        );
         this.dispatchWork(this.sender());
     }
 
@@ -120,68 +111,22 @@ public class PasswordDispatcher extends AbstractWorkDispatcher {
             return;
         }
 
-        this.log().debug(String.format("Worker requested work. %d active hashers, %d active comparators", this.activeHashers, this.activeCompatators));
-
-        if (this.activeCompatators < 1 && this.moreHashesToCompare()) {
-            this.dispatchComparatorWork(worker);
-            return;
-        }
-        if (!this.morePasswordsToHash()) {
-            this.dispatchComparatorWork(worker);
-            return;
-        }
-        if (this.hashesToCompare.size() > this.activeHashers * COMPARATOR_UNDERFLOW_RATIO) {
-            this.dispatchComparatorWork(worker);
-            return;
-        }
-
-        this.dispatchHasherWork(worker);
+	    worker.tell(PasswordWorker.HashPasswordsMessage.builder()
+					    .startPassword(this.nextPasswordToHash)
+					    .endPassword(this.nextPasswordToHash + WORK_CHUNK_SIZE - 1)
+			            .targetPasswordHashes(this.uncrackedTargetPasswordHashes)
+					    .build(),
+			    this.self()
+	    );
+	    this.nextPasswordToHash += WORK_CHUNK_SIZE;
     }
 
 	@Override
 	protected boolean hasMoreWork() {
-        return !this.allPasswordsCracked() && (this.moreHashesToCompare() || this.morePasswordsToHash());
-    }
-
-    private boolean morePasswordsToHash() {
         return this.nextPasswordToHash < LAST_PASSWORD_TO_HASH;
-    }
-
-    private boolean moreHashesToCompare() {
-        return this.hashesToCompare.size() > 0;
     }
 
     private boolean allPasswordsCracked() {
         return this.uncrackedTargetPasswordHashes.size() < 1;
-    }
-
-    private void dispatchComparatorWork(ActorRef comparator) {
-        this.log().debug("Dispatching comparator work");
-
-        PasswordsHashedMessage workItem = this.hashesToCompare.remove(0);
-        comparator.tell(PasswordWorker.ComparePasswordsMessage.builder()
-                .targetPasswordHashes(new HashSet<>(this.uncrackedTargetPasswordHashes))
-                .startPassword(workItem.startPassword)
-                .endPassword(workItem.endPassword)
-                .generatedPasswordHashes(workItem.generatedPasswordHashes)
-                .build(),
-            this.self()
-        );
-        this.activeCompatators++;
-        this.log().debug(String.format("Dispatching comparison work. Currently utilized %d comparators", this.activeCompatators));
-    }
-
-    private void dispatchHasherWork(ActorRef hasher) {
-        this.log().debug("Dispatching hashing work");
-
-        hasher.tell(PasswordWorker.HashPasswordsMessage.builder()
-                .startPassword(this.nextPasswordToHash)
-                .endPassword(this.nextPasswordToHash + WORK_CHUNK_SIZE - 1)
-                .build(),
-            this.self()
-        );
-        this.nextPasswordToHash += WORK_CHUNK_SIZE;
-        this.activeHashers++;
-        this.log().debug(String.format("Dispatching hashing work. Currently utilized %d hashers", this.activeHashers));
     }
 }
