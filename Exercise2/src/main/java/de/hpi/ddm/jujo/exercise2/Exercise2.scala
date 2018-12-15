@@ -4,7 +4,9 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
 import scala.collection.mutable.ListBuffer
 
-object Main extends App {
+object Exercise2 extends App {
+
+  var sparkSession: SparkSession
 
   def defineSparkSession(numberOfCores: Int): SparkSession = {
     val sparkBuilder = SparkSession
@@ -12,8 +14,7 @@ object Main extends App {
       .appName("Exercise2")
       .master("local[" + numberOfCores + "]")
       .config("spark.sql.shuffle.partitions", (numberOfCores * 2).toString)
-    val spark = sparkBuilder.getOrCreate()
-    spark
+    sparkSession = sparkBuilder.getOrCreate()
   }
 
   def readFromCSV(spark: SparkSession, pathToFile: String): DataFrame = {
@@ -52,12 +53,12 @@ object Main extends App {
     readFromCSV(spark, pathToTPCH  + "tpch_supplier.csv")
   }
 
-  def extractColumnsFromRow(columnNames: Array[String], row: Row): List[(String, String)] = {
+  def extractColumnsFromRow(columnNames: Array[String], row: Row): Array[(String, String)] = {
     var tuples = new ListBuffer[(String, String)]()
-    for(i <- columnNames.length) {
-      tuples += ((columnNames.apply(i), row.getString(i)))
+    for(i <- columnNames.indices) {
+      tuples += ((columnNames.apply(i), row.get(i).toString))
     }
-    tuples.toList
+    tuples.toArray
   }
 
   override def main(args: Array[String]): Unit = {
@@ -82,9 +83,19 @@ object Main extends App {
     val nations = readNations(sparkSession, pathToTPCH)
     val regions = readRegions(sparkSession, pathToTPCH)
 
-    nations
-      .flatMap(row => extractColumnsFromRow(nations.columns, row))
-      .show()
+    val dataFrames = Array(nations, regions)
 
+    val columNames = nations.columns
+
+    dataFrames
+      .flatMap(dataFrame => {
+        val columnNames = dataFrame.columns
+        dataFrame.flatMap(row => extractColumnsFromRow(columnNames, row))
+      })
+      .dropDuplicates()
+      .rdd
+      .groupByKey()
+      .take(20)
+      .foreach(println)
   }
 }
