@@ -1,20 +1,18 @@
 package de.hpi.ddm.jujo.exercise2
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql._
 
 import scala.collection.mutable.ListBuffer
 
 object Exercise2 extends App {
-
-  var sparkSession: SparkSession
 
   def defineSparkSession(numberOfCores: Int): SparkSession = {
     val sparkBuilder = SparkSession
       .builder()
       .appName("Exercise2")
       .master("local[" + numberOfCores + "]")
-      .config("spark.sql.shuffle.partitions", (numberOfCores * 2).toString)
-    sparkSession = sparkBuilder.getOrCreate()
+      .config("spark.sql.shuffle.partitions", (numberOfCores * 4).toString)
+    sparkBuilder.getOrCreate()
   }
 
   def readFromCSV(spark: SparkSession, pathToFile: String): DataFrame = {
@@ -80,22 +78,59 @@ object Exercise2 extends App {
     val sparkSession = defineSparkSession(numberOfCores)
     import sparkSession.implicits._
 
-    val nations = readNations(sparkSession, pathToTPCH)
-    val regions = readRegions(sparkSession, pathToTPCH)
+    val dataFrames = Array(
+      readNations(sparkSession, pathToTPCH),
+      readRegions(sparkSession, pathToTPCH),
+      readCustomers(sparkSession, pathToTPCH),
+      readLineItems(sparkSession, pathToTPCH),
+      readOrders(sparkSession, pathToTPCH),
+      readParts(sparkSession, pathToTPCH),
+      readSuppliers(sparkSession, pathToTPCH)
+      )
 
-    val dataFrames = Array(nations, regions)
-
-    val columNames = nations.columns
-
-    dataFrames
+    val values =
+      dataFrames
       .flatMap(dataFrame => {
+        var tuples = new ListBuffer[(String, String)]()
         val columnNames = dataFrame.columns
-        dataFrame.flatMap(row => extractColumnsFromRow(columnNames, row))
-      })
+
+        dataFrame.collect().foreach(row => {
+          for (columnIndex <- columnNames.indices) {
+            tuples += ((columnNames.apply(columnIndex), row.get(columnIndex).toString))
+          }
+        })
+
+        tuples.toArray
+      } : Array[(String, String)])
+
+    val columnValues =
+      sparkSession.sparkContext.parallelize(values)
+      .map(row => (row._1, row._2))
+      .toDF()
       .dropDuplicates()
-      .rdd
-      .groupByKey()
-      .take(20)
-      .foreach(println)
+      .as[(String, String)]
+      .groupByKey(_._1)
+      .mapGroups{case(k, iter) => (k, iter.map(x => x._2).toSeq.sorted)}
+
+    val result =
+      columnValues.crossJoin(columnValues)
+      .as[(String, Set[String], String, Set[String])]
+      .filter(row => row._1 != row._3)
+      .filter(row => {
+        val unmatched = row._2--row._4
+        unmatched.size < 1
+      })
+      .map(row => (row._1, row._3))
+      .groupByKey(_._1)
+      .mapGroups{case(k, iter) => (k, iter.map(_._2).toArray)}
+      .as[(String, Array[String])]
+      //.collect()
+
+    result.foreach(row => {
+      print(row._1 + " < ")
+
+      row._2.foreach(value => print(value + ", "))
+      println()
+    })
   }
 }
