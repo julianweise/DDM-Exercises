@@ -1,12 +1,13 @@
 package de.hpi.ddm.jujo.exercise2
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import java.io.File
+
+import org.apache.spark.sql._
 
 import scala.collection.mutable.ListBuffer
+import scala.io.Source
 
 object Exercise2 extends App {
-
-  var sparkSession: SparkSession
 
   def defineSparkSession(numberOfCores: Int): SparkSession = {
     val sparkBuilder = SparkSession
@@ -14,58 +15,68 @@ object Exercise2 extends App {
       .appName("Exercise2")
       .master("local[" + numberOfCores + "]")
       .config("spark.sql.shuffle.partitions", (numberOfCores * 2).toString)
-    sparkSession = sparkBuilder.getOrCreate()
+    sparkBuilder.getOrCreate()
   }
 
-  def readFromCSV(spark: SparkSession, pathToFile: String): DataFrame = {
-    spark.read
-      .option("inferSchema", "true")
-      .option("header", "true")
-      .option("delimiter", ";")
-      .csv(pathToFile)
-  }
-
-  def readCustomers(spark: SparkSession, pathToTPCH: String): DataFrame = {
-    readFromCSV(spark, pathToTPCH + "tpch_customer.csv")
-  }
-
-  def readLineItems(spark: SparkSession, pathToTPCH: String): DataFrame = {
-    readFromCSV(spark, pathToTPCH + "tpch_lineitem.csv")
-  }
-
-  def readNations(spark: SparkSession, pathToTPCH: String): DataFrame = {
-    readFromCSV(spark, pathToTPCH  + "tpch_nation.csv")
-  }
-
-  def readOrders(spark: SparkSession, pathToTPCH: String): DataFrame = {
-    readFromCSV(spark, pathToTPCH  + "tpch_orders.csv")
-  }
-
-  def readParts(spark: SparkSession, pathToTPCH: String): DataFrame = {
-    readFromCSV(spark, pathToTPCH  + "tpch_part.csv")
-  }
-
-  def readRegions(spark: SparkSession, pathToTPCH: String): DataFrame = {
-    readFromCSV(spark, pathToTPCH + "tpch_region.csv")
-  }
-
-  def readSuppliers(spark: SparkSession, pathToTPCH: String): DataFrame = {
-    readFromCSV(spark, pathToTPCH  + "tpch_supplier.csv")
-  }
-
-  def extractColumnsFromRow(columnNames: Array[String], row: Row): Array[(String, String)] = {
-    var tuples = new ListBuffer[(String, String)]()
-    for(i <- columnNames.indices) {
-      tuples += ((columnNames.apply(i), row.get(i).toString))
+  def readTuplesFromCSV(pathToFile: String): Set[(String, String)] = {
+    val header = new ListBuffer[String]
+    val cells = scala.collection.mutable.Set[(String, String)]()
+    var firstLine = true
+    for (line <- Source.fromFile(pathToFile).getLines) {
+      if (firstLine) {
+        header.appendAll(line.split(";"))
+        header.map(headerCell => headerCell.replace(" ", "").replace("\"", ""))
+        firstLine = false
+      } else {
+        for((value, index) <- line.split(";").zipWithIndex) {
+          if (index < header.length) {
+            cells.+=((value.replace(" ", "").replace("\"", ""), header.apply(index)))
+          }
+        }
+      }
     }
-    tuples.toArray
+    cells.toSet
+  }
+
+  def readAllFiles(pathToFolder: String): List[(String, String)] = {
+    val file = new File(pathToFolder)
+    val allCells = new ListBuffer[(String, String)]
+    file.listFiles.filter(_.isFile)
+      .filter(_.getName.endsWith(".csv"))
+      .map(_.getPath).toList
+      .foreach(file => allCells.appendAll(readTuplesFromCSV(file)))
+    allCells.toList
+  }
+
+  def buildInclusionList(attributeSet: List[String]): List[(String, Set[String])] = {
+    val inclusionList = new ListBuffer[(String, Set[String])]
+    attributeSet.foreach(attribute => {
+      inclusionList.append((attribute, attributeSet.toSet diff Set(attribute)))
+    })
+    inclusionList.toList
+  }
+
+  def intersectInclusionLists(inclusionLists: Iterable[(String, Set[String])]): Set[String] = {
+    inclusionLists.map(tuple => tuple._2).reduce((accumulator, value) => accumulator intersect value)
+  }
+
+  def printResultLine(key: String, references: Set[String]): Unit = {
+    val resultLineBuilder = StringBuilder.newBuilder
+    resultLineBuilder.append(key + " < ")
+    var prefix = ""
+    for (elem <- references) {
+      resultLineBuilder.append(prefix)
+      resultLineBuilder.append(elem)
+      prefix = ", "
+    }
+    println(resultLineBuilder.toString())
   }
 
   override def main(args: Array[String]): Unit = {
     var numberOfCores = 4
     var pathToTPCH = "./TPCH"
 
-    for(i <- args.indices) {
+    for (i <- args.indices) {
       if (args.apply(i) == "--path") {
         pathToTPCH = args.apply(i + 1)
       } else if (args.apply(i) == "--cores") {
@@ -78,24 +89,19 @@ object Exercise2 extends App {
     }
 
     val sparkSession = defineSparkSession(numberOfCores)
-    import sparkSession.implicits._
 
-    val nations = readNations(sparkSession, pathToTPCH)
-    val regions = readRegions(sparkSession, pathToTPCH)
+    val allCells = readAllFiles(pathToTPCH)
 
-    val dataFrames = Array(nations, regions)
 
-    val columNames = nations.columns
-
-    dataFrames
-      .flatMap(dataFrame => {
-        val columnNames = dataFrame.columns
-        dataFrame.flatMap(row => extractColumnsFromRow(columnNames, row))
-      })
-      .dropDuplicates()
-      .rdd
-      .groupByKey()
-      .take(20)
-      .foreach(println)
+    sparkSession.sparkContext.parallelize(allCells)
+      .repartition(numberOfCores)
+      .groupBy(cell => cell._1)
+      .map(keyListTuple => keyListTuple._2.map(groupedTuple => groupedTuple._2))
+      .flatMap(attributeSet => buildInclusionList(attributeSet.toList))
+      .groupBy(inclusionList => inclusionList._1)
+      .map(inclusionListTuple => (inclusionListTuple._1, intersectInclusionLists(inclusionListTuple._2)))
+      .filter(inclusionListTuple => inclusionListTuple._2.nonEmpty)
+      .sortBy(inclusionListTuple => inclusionListTuple._1)
+      .foreach(inclusionListTuple => printResultLine(inclusionListTuple._1, inclusionListTuple._2))
   }
 }
