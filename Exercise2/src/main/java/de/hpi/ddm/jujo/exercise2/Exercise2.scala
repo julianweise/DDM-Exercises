@@ -101,7 +101,8 @@ object Exercise2 extends App {
       .groupBy(inclusionList => inclusionList._1)
       .map(inclusionListTuple => (inclusionListTuple._1, intersectInclusionLists(inclusionListTuple._2)))
       .filter(inclusionListTuple => inclusionListTuple._2.nonEmpty)
-      .sortBy(inclusionListTuple => inclusionListTuple._1)
+      .collect()
+      .sortBy(_._1)
       .foreach(inclusionListTuple => printResultLine(inclusionListTuple._1, inclusionListTuple._2))
   }
 }
