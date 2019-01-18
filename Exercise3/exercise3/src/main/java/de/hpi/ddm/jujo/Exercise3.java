@@ -1,7 +1,12 @@
 package de.hpi.ddm.jujo;
 
+import de.hpi.ddm.jujo.datatypes.AccessLog;
+import de.hpi.ddm.jujo.sources.AccessLogSource;
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+
+import java.io.File;
 
 public class Exercise3 {
 
@@ -24,10 +29,17 @@ public class Exercise3 {
 		numberOfCores = params.getInt("cores", DEFAULT_NUMBER_OF_CORES);
 		pathToHttpLogs = params.get("path", DEFAULT_PATH_TO_HTTP_LOGS);
 
-		// set up the streaming execution environment
+        File f = new File(pathToHttpLogs);
+        if (!f.exists() || f.isDirectory()) {
+           System.err.printf("Error: %s is not a valid log file.\n", pathToHttpLogs);
+        }
+
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
+		DataStream<AccessLog> accessLogs = env
+				.addSource(new AccessLogSource(pathToHttpLogs));
+
 		// execute program
-		env.execute("Flink Streaming Java API Skeleton");
+		env.execute("Exercise 3 Stream");
 	}
 }
