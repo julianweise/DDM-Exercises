@@ -2,8 +2,15 @@ package de.hpi.ddm.jujo;
 
 import de.hpi.ddm.jujo.datatypes.AccessLog;
 import de.hpi.ddm.jujo.sources.AccessLogSource;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.tuple.Tuple;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.DataStreamSink;
+import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
 import java.io.File;
@@ -34,10 +41,21 @@ public class Exercise3 {
            System.err.printf("Error: %s is not a valid log file.\n", pathToHttpLogs);
         }
 
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment
+				.getExecutionEnvironment();
 
-		DataStream<AccessLog> accessLogs = env
-				.addSource(new AccessLogSource(pathToHttpLogs));
+        env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime);
+
+		env.addSource(new AccessLogSource(pathToHttpLogs))
+				.map(new MapFunction<AccessLog, Tuple2<Integer, Integer>>() {
+					@Override
+					public Tuple2<Integer, Integer> map(AccessLog log) {
+						return new Tuple2<>(log.statusCode, 1);
+					}
+				})
+				.keyBy(0)
+				.sum(1)
+				.print();
 
 		// execute program
 		env.execute("Exercise 3 Stream");
