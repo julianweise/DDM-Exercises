@@ -8,13 +8,13 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
-import java.util.Optional;
 
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class AccessLog implements Serializable {
 
+    public boolean isValid;
     public String clientAddress;
     public String clientIdentity;
     public String clientAuthenticationId;
@@ -25,18 +25,24 @@ public class AccessLog implements Serializable {
     public String httpProtocol;
     public int statusCode;
     public int resourceSize;
+    public String rawLine;
 
     private static DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss", Locale.ENGLISH);
 
-    public static Optional<AccessLog> fromString(String line) {
+    public static AccessLog fromString(String line) {
         String[] tokens = line.split(" ");
         AccessLogBuilder builder = new AccessLogBuilder();
 
         if (tokens.length != 10) {
-            return Optional.empty();
+            return builder
+                    .isValid(false)
+                    .rawLine(line)
+                    .build();
         }
 
-        return Optional.of(builder.clientAddress(tokens[0])
+        return builder
+                .isValid(true)
+                .clientAddress(tokens[0])
                 .clientIdentity(tokens[1])
                 .clientAuthenticationId(tokens[2])
                 .timestamp(LocalDateTime.parse(tokens[3].replace("[", ""), timeFormatter))
@@ -46,6 +52,7 @@ public class AccessLog implements Serializable {
                 .httpProtocol(tokens[7].replace("\"", ""))
                 .statusCode(Integer.parseInt(tokens[8]))
                 .resourceSize(Integer.parseInt(tokens[9].replace("-", "0")))
-                .build());
+                .rawLine(line)
+                .build();
     }
 }

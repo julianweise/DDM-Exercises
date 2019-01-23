@@ -25,8 +25,8 @@ public class AccessLogSource implements SourceFunction<AccessLog> {
         String line;
 
         while (reader.ready() && (line = reader.readLine()) != null) {
-            Optional<AccessLog> nextLog = AccessLog.fromString(line);
-            nextLog.ifPresent(sourceContext::collect);
+            AccessLog nextLog = AccessLog.fromString(line);
+            sourceContext.collect(nextLog);
         }
     }
 
