@@ -48,6 +48,8 @@ public class Exercise3 {
            System.err.printf("Error: %s is not a valid log file.\n", pathToHttpLogs);
         }
 
+		StreamExecutionEnvironment.setDefaultLocalParallelism(numberOfCores);
+
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment
 				.getExecutionEnvironment();
 
@@ -95,7 +97,7 @@ public class Exercise3 {
 		ValueState<Boolean> statusAccumulatorExists;
 
 		@Override
-		public void open(Configuration config) throws Exception {
+		public void open(Configuration config) {
 			statusAccumulatorExists = getRuntimeContext().getState(new ValueStateDescriptor<>("statusAccumulatorExists", boolean.class));
 		}
 
